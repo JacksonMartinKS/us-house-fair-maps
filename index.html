@@ -167,6 +167,7 @@ select#pick { width: 100%; font: 500 15px var(--f-body); padding: 8px 10px; bord
 .stack { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .stack .ln { display: flex; justify-content: space-between; gap: 10px; padding: 7px 10px; font-size: 14.5px; border-bottom: 1px solid var(--line); }
 .stack .ln:last-child { border-bottom: 0; }
+.stack .ln.sub { font-size: 13px; color: var(--muted); padding: 4px 10px 4px 24px; }
 .stack .ln.tot { background: var(--plum-soft); font-weight: 700; }
 .stack .ln span:last-child { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mini { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -357,7 +358,7 @@ footer { font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--lin
     <div class="sec-head"><h2>How the numbers work</h2></div>
     <div class="method">
       <p><b>Margins</b> are the Republican share minus the Democratic share of all votes cast. R+8 means the Republican won by 8 points; the map shades from D+30 to R+30 and saturates past that.</p>
-      <p><b>Implied House results.</b> Redrawn districts never held a House election, so each one starts from its own presidential margin and adds how far House candidates ran ahead of or behind the top of the ticket in the real districts its voters came from. 2016–18 are measured against the 2016 presidential result, 2020–22 against 2020, and 2024–26 against 2024. Races with no Democrat-vs-Republican matchup borrow the state’s average gap.</p>
+      <p><b>Implied House results.</b> Redrawn districts never held a House election, so each one starts from its own presidential margin and adds a swing: how far House candidates ran ahead of or behind the top of the ticket. Part of that swing follows the incumbent most likely to run in each redrawn seat, so a strong or weak candidate’s showing carries over with them, and the rest is the average across every real district its voters came from. Each real district is paired with the one redrawn seat that keeps the most of its voters; seats left without a clear pair are treated as open. The two halves count equally. Each year is measured against the most recent presidential race (2016, 2020 or 2024), and races with no Democrat-vs-Republican matchup borrow the state’s average gap.</p>
       <p><b>Matching voters between old and new lines</b> uses counties (state House districts in Kansas), rescaled to match each district’s exact presidential totals, so it’s approximate in big metros and in New England.</p>
       <p id="as-of"></p>
     </div>
@@ -864,6 +865,8 @@ function houseBlock(d, y) {
     <div class="stack">
       <div class="ln"><span>${h.ref} presidential margin here</span><span class="${cls(h.base)}">${fmtM(h.base)}</span></div>
       <div class="ln"><span>+ House candidates vs. top of ticket</span><span class="${cls(h.adj)}">${fmtM(h.adj)}</span></div>
+      ${h.cand ? `<div class="ln sub"><span>${Math.round(h.cand.k * 100)}% from ${esc(h.cand.o)}’s race (its incumbent would most likely run here)</span><span class="${cls(h.cand.s)}">${fmtM(h.cand.s)}</span></div>
+      <div class="ln sub"><span>${Math.round((1 - h.cand.k) * 100)}% from every source district, by share of voters</span><span class="${cls(h.reg)}">${fmtM(h.reg)}</span></div>` : ""}
       <div class="ln tot"><span>Implied ${y} House margin</span><span class="${cls(v)}">${fmtM(v)}</span></div>
     </div>
     <div style="overflow-x:auto"><table class="mini"><thead><tr><th>District then</th><th class="rt">Share</th><th class="rt">House</th><th class="rt">Pres ’${String(h.ref).slice(2)}</th><th class="rt">Swing</th></tr></thead><tbody>${rows}</tbody></table></div>
