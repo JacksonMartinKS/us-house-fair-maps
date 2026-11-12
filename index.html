@@ -132,7 +132,9 @@ svg .hex.blank { fill: var(--blank); }
 svg .hex.has { cursor: pointer; }
 svg .hex.blank.click { cursor: pointer; }
 svg .dist[data-ind="1"] { stroke: var(--ind); stroke-width: 2.4; }
-svg .hexb { fill: none; stroke: var(--state-line); stroke-width: 0.9; vector-effect: non-scaling-stroke; stroke-linecap: round; pointer-events: none; }
+svg .hex.has { stroke-width: 1.4; }
+svg .hexd { fill: none; stroke: var(--panel); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; pointer-events: none; }
+svg .hexb { fill: none; stroke: var(--state-line); stroke-width: 1.1; vector-effect: non-scaling-stroke; stroke-linecap: round; pointer-events: none; }
 svg text { font-family: var(--f-body); pointer-events: none; }
 svg .slab { font-weight: 700; fill: var(--muted); letter-spacing: .02em; }
 svg .dlab { font-weight: 600; }
@@ -640,12 +642,13 @@ function drawGeo() {
 }
 
 const HEX_DIRS = { even: [[1, 0], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1]], odd: [[1, 0], [1, 1], [0, 1], [-1, 0], [0, -1], [1, -1]] };
+let DOUT = {};   // hex view: outline path of each district (for the selection ring)
 function drawHex() {
   const cells = NAT.hex.cells, R = NAT.hex.R;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const c of cells) { x0 = Math.min(x0, c[0]); y0 = Math.min(y0, c[1]); x1 = Math.max(x1, c[0]); y1 = Math.max(y1, c[1]); }
   // extra room on the right so the zoom buttons don't sit on New England
-  const pad = R * 1.4, w = x1 - x0 + 2 * pad + R * 5, h = y1 - y0 + 2 * pad;
+  const pad = R * 5, w = x1 - x0 + 2 * pad + R * 14, h = y1 - y0 + 2 * pad;
   hexBox = { x0: x0 - pad, y0: y0 - pad, w, h };
   setupSVG(w, h);
   const g = zoomG.append("g").attr("transform", `translate(${-hexBox.x0},${-hexBox.y0})`);
@@ -657,37 +660,76 @@ function drawHex() {
     .attr("data-st", o => o.c[2]).attr("d", o => hexPath(o.c[0], o.c[1], R))
     .on("click", (ev, o) => { ev.stopPropagation(); if (o.d) (o.d.id === ui.sel ? clearSelection() : selectDistrict(o.d.id, { zoomTo: false })); else selectState(o.c[2], false); })
     .on("mousemove", (ev, o) => o.d ? distTip(ev, o.d) : stateTip(ev, o.c[2])).on("mouseleave", hideTip);
-  // state borders: hex edges whose neighbour belongs to another state (or nothing)
-  // each state sits on its own little lattice, so neighbours are looked up within the state
-  const key = {}; cells.forEach(c => { key[c[2] + ":" + c[3] + "," + c[4]] = c[2]; });
-  let bd = "";
-  for (const c of cells) {
-    const dirs = HEX_DIRS[Math.abs(c[4]) % 2 ? "odd" : "even"];
+  // borders: each state sits on its own lattice, so neighbours are looked up within the state.
+  // An edge with no neighbour is the state's outline; an edge between two districts is a district line.
+  const key = {}; cells.forEach((c, i) => { key[c[2] + ":" + c[3] + "," + c[4]] = i; });
+  let sb = "", db = ""; DOUT = {};
+  cells.forEach((c, i) => {
+    const dirs = HEX_DIRS[Math.abs(c[4]) % 2 ? "odd" : "even"], me = byCell[i];
     // edge k sits between corners k and k+1; directions above are listed in the same order (E, SE, SW, W, NW, NE)
     dirs.forEach(([dq, dr], k) => {
-      const nb = key[c[2] + ":" + (c[3] + dq) + "," + (c[4] + dr)];
-      if (nb !== c[2]) { const a = corner(c[0], c[1], k, R), b = corner(c[0], c[1], k + 1, R); bd += `M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`; }
+      const j = key[c[2] + ":" + (c[3] + dq) + "," + (c[4] + dr)];
+      const a = corner(c[0], c[1], k, R), b = corner(c[0], c[1], k + 1, R);
+      const seg = `M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`;
+      if (j == null) { sb += seg; if (me) DOUT[me.id] = (DOUT[me.id] || "") + seg; }
+      else if (byCell[j] !== me) { if (i < j) db += seg; if (me) DOUT[me.id] = (DOUT[me.id] || "") + seg; }
     });
-  }
-  g.append("path").attr("class", "hexb").attr("d", bd);
+  });
+  g.append("path").attr("class", "hexd").attr("d", db);
+  g.append("path").attr("class", "hexb").attr("d", sb);
   g.append("path").attr("class", "selring").attr("id", "selring");
-  // labels: state abbreviation at the hex nearest each state's centre; district numbers on drawn states
+  // district numbers at the cell nearest each district's middle
   const lab = g.append("g").attr("class", "labs");
-  const groups = d3.group(cells.map((c, i) => ({ c, i })), o => o.c[2]);
-  for (const [ab, arr] of groups) {
-    const mx = d3.mean(arr, o => o.c[0]), my = d3.mean(arr, o => o.c[1]);
+  const byD = d3.group(cells.map((c, i) => ({ c, i })).filter(o => byCell[o.i]), o => byCell[o.i].id);
+  for (const [id, arr] of byD) {
+    const d = DIST[id], mx = d3.mean(arr, o => o.c[0]), my = d3.mean(arr, o => o.c[1]);
     const best = arr.reduce((a, o) => (Math.hypot(o.c[0] - mx, o.c[1] - my) < Math.hypot(a.c[0] - mx, a.c[1] - my) ? o : a));
-    const drawn = arr.some(o => byCell[o.i]);
-    for (const o of arr) {
-      const d = byCell[o.i];
-      if (d && d.path) {
-        lab.append("text").attr("class", "dlab hexnum").attr("data-id", d.id).attr("x", o.c[0]).attr("y", o.c[1] + (o === best ? R * 0.28 : 0))
-          .attr("text-anchor", "middle").attr("dominant-baseline", "central").attr("font-size", R * 0.62).text(d.n);
+    if (NAT.states[d.st].seats > 1) lab.append("text").attr("class", "dlab hexnum").attr("data-id", id).attr("x", best.c[0]).attr("y", best.c[1])
+      .attr("text-anchor", "middle").attr("dominant-baseline", "central").attr("font-size", R * 1.75).text(d.n);
+  }
+  // state abbreviations just outside each state: try spots next to its edge cells, keep the free one
+  // closest to the state's middle, and don't let labels overlap each other
+  const fs = R * 2.1, cellR = R * 0.95, bin = R * 6, grid = new Map();
+  cells.forEach(c => { const k = Math.floor(c[0] / bin) + ":" + Math.floor(c[1] / bin); (grid.get(k) || grid.set(k, []).get(k)).push(c); });
+  const clear = (lx, ly, hw, hh) => {   // distance from a label box to the nearest hex
+    let m = Infinity;
+    for (let i = Math.floor((lx - hw) / bin) - 1; i <= Math.floor((lx + hw) / bin) + 1; i++)
+      for (let j = Math.floor((ly - hh) / bin) - 1; j <= Math.floor((ly + hh) / bin) + 1; j++)
+        for (const c of grid.get(i + ":" + j) || []) m = Math.min(m, Math.hypot(Math.max(0, Math.abs(c[0] - lx) - hw), Math.max(0, Math.abs(c[1] - ly) - hh)) - cellR);
+    return m;
+  };
+  const near = (lx, ly, ab) => {   // nearest cell of this state vs. nearest cell of any other state
+    let own = Infinity, other = Infinity;
+    const i0 = Math.floor(lx / bin), j0 = Math.floor(ly / bin);
+    for (let i = i0 - 2; i <= i0 + 2; i++) for (let j = j0 - 2; j <= j0 + 2; j++)
+      for (const c of grid.get(i + ":" + j) || []) {
+        const d = Math.hypot(c[0] - lx, c[1] - ly);
+        if (c[2] === ab) own = Math.min(own, d); else other = Math.min(other, d);
       }
+    return [own, other];
+  };
+  const placed = [], dirs8 = [0, 180, 90, 270, 35, 145, 215, 325].map(a => [Math.cos(a * Math.PI / 180), Math.sin(a * Math.PI / 180)]);
+  const groupsS = [...d3.group(cells, c => c[2])].sort((a, b) => a[1].length - b[1].length);
+  for (const [ab, arr] of groupsS) {
+    const hw = fs * 0.33 * ab.length, hh = fs * 0.42, mx = d3.mean(arr, c => c[0]), my = d3.mean(arr, c => c[1]);
+    const keys = new Set(arr.map(c => c[3] + "," + c[4]));
+    const edge = arr.filter(c => HEX_DIRS[Math.abs(c[4]) % 2 ? "odd" : "even"].some(([dq, dr]) => !keys.has((c[3] + dq) + "," + (c[4] + dr))));
+    let best = null, bestS = Infinity, roomy = null, roomyS = -Infinity;
+    for (const c of edge) for (const [ux, uy] of dirs8) for (const gap of [R * 1.1, R * 2.6]) {
+      const off = gap + Math.abs(ux) * hw + Math.abs(uy) * hh, lx = c[0] + ux * off, ly = c[1] + uy * off;
+      if (placed.some(p => Math.abs(p[0] - lx) < p[2] + hw + R * 0.3 && Math.abs(p[1] - ly) < p[3] + hh + R * 0.2)) continue;
+      const cl = clear(lx, ly, hw, hh);
+      if (cl > roomyS) { roomyS = cl; roomy = [lx, ly]; }
+      if (cl < R * 0.25) continue;
+      const [own, other] = near(lx, ly, ab);
+      if (other < own * 1.5) continue;   // keep labels clearly next to their own state
+      const sc = Math.hypot(lx - mx, ly - my) + (gap > R * 2 ? R * 2 : 0) - (ux > 0.5 ? R * 2 : 0);   // close in, and a little to the right
+      if (sc < bestS) { bestS = sc; best = [lx, ly]; }
     }
-    lab.append("text").attr("class", "slab").attr("data-st", ab).attr("data-cell", byCell[best.i] ? best.i : null)
-      .attr("x", best.c[0]).attr("y", best.c[1] - (drawn && byCell[best.i] && byCell[best.i].path ? R * 0.32 : 0))
-      .attr("text-anchor", "middle").attr("dominant-baseline", "central").attr("font-size", R * (drawn && byCell[best.i] && byCell[best.i].path ? 0.5 : 0.62)).text(ab);
+    best = best || roomy || [d3.max(arr, c => c[0]) + R * 1.1 + hw, my];
+    placed.push([best[0], best[1], hw, hh]);
+    lab.append("text").attr("class", "slab").attr("data-st", ab).attr("x", best[0]).attr("y", best[1])
+      .attr("text-anchor", "middle").attr("dominant-baseline", "central").attr("font-size", fs).text(ab);
   }
   paint();
 }
@@ -695,6 +737,7 @@ function drawHex() {
 function paint() {
   if (!zoomG) return;
   zoomG.selectAll(".dist").attr("fill", function () { return fillFor(DIST[this.getAttribute("data-id")]); })
+    .style("stroke", function () { return this.classList.contains("hex") ? this.getAttribute("fill") : null; })
     .attr("data-ind", function () { return valueOf(DIST[this.getAttribute("data-id")], ui.ds).opp ? 1 : null; });
   zoomG.selectAll(".slab").style("fill", function () {
     const c = this.getAttribute("data-cell");
@@ -723,6 +766,7 @@ function markSelected() {
   if (!ring || ring.empty()) return;
   const d = ui.sel && DIST[ui.sel];
   if (!d) { ring.attr("d", null); return; }
+  if (ui.view === "hex") { ring.attr("d", DOUT[d.id] || null).attr("clip-path", null); return; }
   const el = zoomG.select(`.dist[data-id="${d.id}"]`).node();
   ring.attr("d", el ? el.getAttribute("d") : null).attr("clip-path", el ? el.getAttribute("clip-path") : null);
 }
@@ -737,7 +781,7 @@ function zoomToBox(b, maxK = 10) {
 function zoomToState(ab) {
   if (ui.view === "map") return zoomToBox(NAT.states[ab].bbox, 12);
   const cs = NAT.hex.cells.filter(c => c[2] === ab), R = NAT.hex.R;
-  const b = [d3.min(cs, c => c[0]) - R * 3 - hexBox.x0, d3.min(cs, c => c[1]) - R * 3 - hexBox.y0, d3.max(cs, c => c[0]) + R * 3 - hexBox.x0, d3.max(cs, c => c[1]) + R * 3 - hexBox.y0];
+  const b = [d3.min(cs, c => c[0]) - R * 6 - hexBox.x0, d3.min(cs, c => c[1]) - R * 6 - hexBox.y0, d3.max(cs, c => c[0]) + R * 6 - hexBox.x0, d3.max(cs, c => c[1]) + R * 6 - hexBox.y0];
   zoomToBox(b, 5);
 }
 
@@ -956,7 +1000,7 @@ function selectState(ab, zoomTo) {
 function setView(v) {
   ui.view = v; curK = 1;
   $("v-map").setAttribute("aria-pressed", v === "map"); $("v-hex").setAttribute("aria-pressed", v === "hex");
-  $("maphint").textContent = v === "map" ? "Click a state to zoom · scroll or pinch to zoom" : "Each hexagon is one House seat · blank hexes have no result for this view";
+  $("maphint").textContent = v === "map" ? "Click a state to zoom · scroll or pinch to zoom" : "Every district is the same size · seats with no result for this view are blank";
   for (const d of Object.values(DIST)) delete d._bb;
   v === "map" ? drawGeo() : drawHex();
 }
@@ -1152,7 +1196,7 @@ async function boot() {
     for (const f of files) {
       if (!f) continue;
       ST[f.state] = f;
-      for (const d of f.districts) { d.st = f.state; DIST[d.id] = d; if (d.hex != null) HEXD[d.hex] = d; }
+      for (const d of f.districts) { d.st = f.state; DIST[d.id] = d; [].concat(d.hex ?? []).forEach(i => { HEXD[i] = d; }); }
     }
   } catch (e) {
     $("card").innerHTML = `<p class="note">The map data didn’t load (${esc(e.message)}). If you opened index.html straight from your disk, serve the folder instead: <span class="num">python3 -m http.server</span>.</p>`;
