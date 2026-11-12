@@ -1,0 +1,1163 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>US House Fair Maps</title>
+<meta name="description" content="Proposed fair, representative US House maps, state by state: presidential results, implied House results and demographics for every redrawn district.">
+<meta property="og:title" content="US House Fair Maps">
+<meta property="og:description" content="Proposed fair US House maps, state by state, with presidential results, implied House results and demographics.">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="theme-color" content="#7a1951">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+/* Layout: brand bar, controls, seat header + 435-seat bar, then map (geo or hex) beside a sticky district card; progress grid and method below. Max width 1240px. Tokens follow the Jackson Martin Forecasts sites. */
+:root {
+  --bg: #f6f3ee;
+  --panel: #fffdf9;
+  --ink: #1c2230;
+  --muted: #5d6474;
+  --line: #e3ddd2;
+  --plum: #7a1951;
+  --plum-soft: #f2e4ec;
+  --dem: #1f57b0;
+  --gop: #c4470f;
+  --map-line: #ffffff;
+  --state-line: #6f6a62;
+  --blank: #e9e3d8;
+  --blank-line: #d6cec0;
+  --pending: #d8d1c4;
+  --ind: #b45f06;
+  --dnum-m: #0b2a7a; --rnum-m: #7a1f18;
+  --shadow: 0 8px 24px rgba(20, 15, 25, .16);
+  --f-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141116; --panel: #1c181f; --ink: #ede7ee; --muted: #a59ca8; --line: #2f2833;
+    --plum: #d977ad; --plum-soft: #34202c; --dem: #73a7f2; --gop: #f2884f; --map-line: #141116;
+    --state-line: #8d8592; --blank: #2a242e; --blank-line: #3a3240; --pending: #3b3441; --ind: #f0a33a;
+    --dnum-m: #8fb0ff; --rnum-m: #ff9a84; --shadow: 0 8px 24px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141116; --panel: #1c181f; --ink: #ede7ee; --muted: #a59ca8; --line: #2f2833;
+  --plum: #d977ad; --plum-soft: #34202c; --dem: #73a7f2; --gop: #f2884f; --map-line: #141116;
+  --state-line: #8d8592; --blank: #2a242e; --blank-line: #3a3240; --pending: #3b3441; --ind: #f0a33a;
+  --dnum-m: #8fb0ff; --rnum-m: #ff9a84; --shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15.5px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.D { color: var(--dnum-m); } .R { color: var(--rnum-m); } .I { color: var(--ind); }
+a { color: var(--plum); }
+:focus-visible { outline: 2px solid var(--plum); outline-offset: 2px; }
+button { font-family: inherit; }
+
+/* brand bar */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px 20px; flex-wrap: wrap; padding: 18px 0 14px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand svg { width: 30px; height: 30px; flex: none; }
+.brand span { font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--plum); font-size: 15px; }
+.links { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; font-weight: 600; }
+.links a { text-decoration: none; color: var(--muted); }
+.links a:hover { color: var(--plum); }
+
+/* controls */
+.ctl-row { display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: center; }
+.grp { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.whatif { display: flex; align-items: center; gap: 10px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+.whatif input { width: 190px; accent-color: var(--muted); cursor: pointer; }
+.whatif .end { font-size: 12px; color: var(--muted); }
+@media (max-width: 420px) { .whatif input { width: 130px; } }
+.whatif output { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 46px; color: var(--muted); }
+.whatif.on { border-color: var(--plum); }
+.whatif.on input { accent-color: var(--plum); }
+.whatif.on output { color: var(--plum); }
+.grp > .k { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+.seg { display: inline-flex; background: var(--line); border-radius: 9px; padding: 3px; gap: 2px; }
+.seg button { font: 600 14px var(--f-body); border: 0; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 7px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.seg button:hover { color: var(--ink); }
+@media (max-width: 420px) { .seg button { padding: 6px 7px; } .tabs button { padding: 8px 6px 9px; letter-spacing: .03em; } }
+
+/* seat header */
+.seat-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 12px; }
+.party { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.party.rr { align-items: flex-end; text-align: right; }
+.party .lbl { font-weight: 600; letter-spacing: .12em; font-size: 14px; text-transform: uppercase; }
+.party .row { display: flex; align-items: baseline; gap: 12px; }
+.party.rr .row { flex-direction: row-reverse; }
+.party .big { font-family: var(--f-display); font-weight: 800; font-size: clamp(46px, 7.5vw, 72px); line-height: .9; font-variant-numeric: tabular-nums; }
+.party .sub { color: var(--muted); font-size: 14.5px; }
+.title-block { text-align: center; padding-bottom: 6px; }
+.title-block h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(26px, 3.6vw, 40px); margin: 0; line-height: 1.05; text-wrap: balance; }
+.title-block p { margin: 4px 0 0; color: var(--muted); font-size: 14.5px; }
+@media (max-width: 640px) {
+  .seat-head { grid-template-columns: 1fr 1fr; }
+  .title-block { grid-column: 1 / -1; grid-row: 1; }
+}
+.seatbar { position: relative; height: 30px; display: flex; }
+.seatbar div { height: 100%; }
+.seatbar .mark { position: absolute; top: -7px; bottom: -7px; width: 2px; background: var(--ink); }
+.seatbar-labels { position: relative; height: 22px; font-size: 13.5px; color: var(--muted); }
+.seatbar-labels span { position: absolute; top: 2px; white-space: nowrap; }
+@media (max-width: 640px) { .seatbar-labels { height: 42px; } .seatbar-labels .nd { top: 22px; } }
+
+/* main */
+.main { display: flex; flex-direction: column; gap: 16px; }
+.mapcard { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-width: 0; }
+.mapcard svg { display: block; width: 100%; height: auto; touch-action: none; }
+.zbtns { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 4px; z-index: 2; }
+.zbtns button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 18px var(--f-body); cursor: pointer; display: grid; place-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.zbtns button:hover { border-color: var(--plum); color: var(--plum); }
+.zbtns button.us { font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+.maphint { position: absolute; left: 12px; bottom: 10px; font-size: 12.5px; color: var(--muted); background: color-mix(in srgb, var(--panel) 85%, transparent); padding: 2px 8px; border-radius: 6px; pointer-events: none; }
+svg .st { fill: var(--blank); stroke: none; }
+svg .st.click { cursor: pointer; }
+svg .st.click:hover { fill: color-mix(in srgb, var(--blank) 80%, var(--plum)); }
+svg .stl { fill: none; stroke: var(--state-line); stroke-width: .8; vector-effect: non-scaling-stroke; stroke-linejoin: round; pointer-events: none; }
+svg .dist { stroke: var(--map-line); stroke-width: .7; vector-effect: non-scaling-stroke; stroke-linejoin: round; cursor: pointer; }
+svg .selring { fill: none; stroke: var(--ink); stroke-width: 2.6; vector-effect: non-scaling-stroke; pointer-events: none; stroke-linejoin: round; }
+svg .hex { stroke: var(--panel); stroke-width: 1; vector-effect: non-scaling-stroke; }
+svg .hex.blank { fill: var(--blank); }
+svg .hex.has { cursor: pointer; }
+svg .hex.blank.click { cursor: pointer; }
+svg .dist[data-ind="1"] { stroke: var(--ind); stroke-width: 2.4; }
+svg .hexb { fill: none; stroke: var(--state-line); stroke-width: 0.9; vector-effect: non-scaling-stroke; stroke-linecap: round; pointer-events: none; }
+svg text { font-family: var(--f-body); pointer-events: none; }
+svg .slab { font-weight: 700; fill: var(--muted); letter-spacing: .02em; }
+svg .dlab { font-weight: 600; }
+
+/* legend */
+.legend-row { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; font-size: 14.5px; }
+.legend-row .gbar { width: 220px; max-width: 42vw; height: 14px; border-radius: 2px; }
+.legend-row .it { display: inline-flex; align-items: center; gap: 8px; }
+.sw { display: inline-block; width: 18px; height: 18px; border-radius: 3px; border: 1px solid var(--blank-line); }
+
+/* sidebar card */
+.side { display: flex; flex-direction: column; gap: 10px; min-width: 0; width: 100%; max-width: 860px; }
+.side select#pick { max-width: 420px; }
+.side label.k { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+select#pick { width: 100%; font: 500 15px var(--f-body); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card .hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.card .did { font-family: var(--f-display); font-weight: 800; font-size: 34px; line-height: 1; }
+.card .dsub { color: var(--muted); font-size: 14px; margin-top: 3px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font: 600 13px var(--f-body); padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.chip i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs button { font: 700 13.5px var(--f-body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: none; border: 0; padding: 8px 10px 9px; cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--plum); border-bottom-color: var(--plum); }
+.big-m { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.big-m .t { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+.big-m .v { font-family: var(--f-display); font-weight: 800; font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }
+.vbar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: var(--line); }
+.vbar span { height: 100%; }
+.vrow { display: flex; justify-content: space-between; font-size: 14px; gap: 10px; }
+.vrow b { font-weight: 600; }
+.stack { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.stack .ln { display: flex; justify-content: space-between; gap: 10px; padding: 7px 10px; font-size: 14.5px; border-bottom: 1px solid var(--line); }
+.stack .ln:last-child { border-bottom: 0; }
+.stack .ln.tot { background: var(--plum-soft); font-weight: 700; }
+.stack .ln span:last-child { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mini { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.mini th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.mini td { padding: 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.mini tr:last-child td { border-bottom: 0; }
+.mini tr.top td { border-bottom: 0; padding-bottom: 0; }
+.mini tr.sub td { padding-top: 1px; }
+.mini td.rt, .mini th.rt { text-align: right; white-space: nowrap; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.mini .cand { color: var(--muted); font-size: 12.5px; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.note.warn { background: var(--plum-soft); color: var(--ink); padding: 7px 9px; border-radius: 6px; }
+.mbar { display: inline-block; width: 54px; height: 8px; background: var(--line); border-radius: 4px; position: relative; vertical-align: middle; margin-right: 6px; }
+.mbar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.mbar::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--muted); }
+.overview p { margin: 0; }
+.overview .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.overview .stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.overview .stat b { display: block; font-family: var(--f-display); font-size: 28px; line-height: 1.05; }
+.overview .stat span { font-size: 12.5px; color: var(--muted); }
+
+/* demographics (matches the Kansas House site) */
+.demo-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.demo-tile { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.tile-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.tile-val { font-family: var(--f-display); font-size: 30px; font-weight: 700; line-height: 1.1; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile-sub { font-size: 13px; color: var(--muted); }
+.tile-rank { font-size: 13px; font-weight: 700; color: var(--plum); margin-top: 2px; }
+.demo-block { display: flex; flex-direction: column; gap: 4px; }
+.demo-title { font-family: var(--f-display); font-size: 16px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: .02em; }
+.bar-row { display: flex; align-items: center; gap: 6px; }
+.bar-tag { width: 40px; flex-shrink: 0; font-size: 11.5px; font-weight: 700; color: var(--muted); text-align: right; }
+.h-stack { flex: 1; display: flex; height: 16px; border-radius: 4px; overflow: hidden; }
+.h-stack.ks { height: 7px; opacity: .8; }
+.h-seg { height: 100%; }
+.demo-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 3px; font-size: 13px; font-weight: 600; }
+.dl-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.dl-box { width: 12px; height: 12px; border-radius: 2px; }
+.dl-item span { color: var(--muted); font-weight: 500; }
+.demo-note { font-size: 13px; color: var(--muted); }
+.demo-source { font-size: 12px; color: var(--muted); }
+
+/* fairness */
+.fair-sum { margin: 0; font-size: 16px; line-height: 1.5; max-width: 80ch; }
+.tblwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.ftab { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.ftab th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ftab td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ftab tr:last-child td { border-bottom: 0; }
+.ftab td.n, .ftab th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ftab td.p { font-weight: 700; }
+.ftab .ex { color: var(--muted); font-size: 13.5px; min-width: 260px; }
+.ftab tbody tr:hover td { background: color-mix(in srgb, var(--panel) 92%, var(--plum)); }
+.fair-fig { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fair-fig figcaption { font-size: 15px; color: var(--muted); max-width: 80ch; }
+.fair-fig figcaption b { color: var(--ink); }
+#fair-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+#fair-chart .tick text { fill: var(--muted); font: 12px var(--f-body); }
+#fair-chart .tick line, #fair-chart .domain { stroke: var(--line); }
+.fair-keys { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; color: var(--muted); }
+.fair-keys span { display: inline-flex; align-items: center; gap: 6px; }
+.fair-keys svg { width: 26px; height: 10px; }
+h3 { font-family: var(--f-display); font-weight: 700; font-size: 20px; margin: 6px 0 0; }
+details.fair-st summary { cursor: pointer; font-weight: 600; font-size: 15px; padding: 4px 0; }
+details.fair-st[open] summary { margin-bottom: 8px; }
+
+/* progress */
+section { display: flex; flex-direction: column; gap: 12px; }
+h2 { font-family: var(--f-display); font-weight: 700; font-size: 26px; margin: 0; line-height: 1.1; }
+.sec-head p { margin: 4px 0 0; color: var(--muted); max-width: 75ch; font-size: 15px; }
+.prog { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.prog button { display: flex; justify-content: space-between; align-items: center; gap: 6px; font: 600 14px var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; cursor: pointer; text-align: left; }
+.prog button span { font-family: var(--f-mono); font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.prog button.proposed { border-color: var(--plum); background: var(--plum-soft); }
+.prog button.at-large { border-style: dashed; border-color: var(--state-line); }
+.prog button:hover { border-color: var(--plum); }
+.keys { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; color: var(--muted); }
+.keys span { display: inline-flex; align-items: center; gap: 6px; }
+.keys i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); background: var(--panel); display: inline-block; }
+.keys i.p { border-color: var(--plum); background: var(--plum-soft); }
+.keys i.a { border-style: dashed; border-color: var(--state-line); }
+.method { font-size: 15px; color: var(--muted); max-width: 78ch; display: flex; flex-direction: column; gap: 10px; }
+.method p { margin: 0; }
+.method b { color: var(--ink); font-weight: 600; }
+footer { font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+#tip { position: fixed; z-index: 50; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font-size: 14px; width: 250px; max-width: calc(100vw - 24px); box-shadow: var(--shadow); pointer-events: none; }
+#tip .h { font-weight: 700; font-size: 15px; display: flex; justify-content: space-between; gap: 8px; }
+#tip .h span { font-weight: 600; font-family: var(--f-mono); font-size: 14px; }
+#tip .m { color: var(--muted); font-size: 13px; }
+.loading { padding: 60px 20px; text-align: center; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <div class="topbar">
+    <a class="brand" href="https://jacksonmartinks.github.io/" target="_top" aria-label="Jackson Martin Forecasts home"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true" focusable="false"><defs><linearGradient id="brandGrad" gradientUnits="userSpaceOnUse" x1="15.36" y1="15.36" x2="539.47" y2="444.18"><stop offset="0" stop-color="#55145b"/><stop offset="1" stop-color="#9f1e47"/></linearGradient></defs><path d="M77.42 216.04 Q85.11 211.60 92.80 216.04 L115.87 229.36 Q123.56 233.80 123.56 242.68 L123.56 269.32 Q123.56 278.20 115.87 282.64 L92.80 295.96 Q85.11 300.40 77.42 295.96 L54.35 282.64 Q46.66 278.20 46.66 269.32 L46.66 242.68 Q46.66 233.80 54.35 229.36 Z" fill="#661656"/><path d="M120.14 290.04 Q127.83 285.60 135.52 290.04 L158.59 303.36 Q166.28 307.80 166.28 316.68 L166.28 343.32 Q166.28 352.20 158.59 356.64 L135.52 369.96 Q127.83 374.39 120.14 369.96 L97.07 356.64 Q89.38 352.20 89.38 343.32 L89.38 316.68 Q89.38 307.80 97.07 303.36 Z" fill="#731853"/><path d="M162.87 364.04 Q170.56 359.60 178.25 364.04 L201.32 377.35 Q209.01 381.79 209.01 390.67 L209.01 417.31 Q209.01 426.19 201.32 430.63 L178.25 443.95 Q170.56 448.39 162.87 443.95 L139.80 430.63 Q132.11 426.19 132.11 417.31 L132.11 390.67 Q132.11 381.79 139.80 377.35 Z" fill="#801a4f"/><path d="M120.14 142.04 Q127.83 137.61 135.52 142.04 L158.59 155.36 Q166.28 159.80 166.28 168.68 L166.28 195.32 Q166.28 204.20 158.59 208.64 L135.52 221.96 Q127.83 226.40 120.14 221.96 L97.07 208.64 Q89.38 204.20 89.38 195.32 L89.38 168.68 Q89.38 159.80 97.07 155.36 Z" fill="#621657"/><path d="M162.87 216.04 Q170.56 211.60 178.25 216.04 L201.32 229.36 Q209.01 233.80 209.01 242.68 L209.01 269.32 Q209.01 278.20 201.32 282.64 L178.25 295.96 Q170.56 300.40 162.87 295.96 L139.80 282.64 Q132.11 278.20 132.11 269.32 L132.11 242.68 Q132.11 233.80 139.80 229.36 Z" fill="#701854"/><path d="M205.59 290.04 Q213.28 285.60 220.97 290.04 L244.04 303.36 Q251.73 307.80 251.73 316.68 L251.73 343.32 Q251.73 352.20 244.04 356.64 L220.97 369.96 Q213.28 374.39 205.59 369.96 L182.52 356.64 Q174.83 352.20 174.83 343.32 L174.83 316.68 Q174.83 307.80 182.52 303.36 Z" fill="#7d1950"/><path d="M248.31 364.04 Q256.00 359.60 263.69 364.04 L286.76 377.35 Q294.45 381.79 294.45 390.67 L294.45 417.31 Q294.45 426.19 286.76 430.63 L263.69 443.95 Q256.00 448.39 248.31 443.95 L225.24 430.63 Q217.55 426.19 217.55 417.31 L217.55 390.67 Q217.55 381.79 225.24 377.35 Z" fill="#8b1b4c"/><path d="M162.87 68.05 Q170.56 63.61 178.25 68.05 L201.32 81.37 Q209.01 85.81 209.01 94.69 L209.01 121.33 Q209.01 130.21 201.32 134.65 L178.25 147.96 Q170.56 152.40 162.87 147.96 L139.80 134.65 Q132.11 130.21 132.11 121.33 L132.11 94.69 Q132.11 85.81 139.80 81.37 Z" fill="#5f1558"/><path d="M205.59 142.04 Q213.28 137.61 220.97 142.04 L244.04 155.36 Q251.73 159.80 251.73 168.68 L251.73 195.32 Q251.73 204.20 244.04 208.64 L220.97 221.96 Q213.28 226.40 205.59 221.96 L182.52 208.64 Q174.83 204.20 174.83 195.32 L174.83 168.68 Q174.83 159.80 182.52 155.36 Z" fill="#6d1755"/><path d="M248.31 216.04 Q256.00 211.60 263.69 216.04 L286.76 229.36 Q294.45 233.80 294.45 242.68 L294.45 269.32 Q294.45 278.20 286.76 282.64 L263.69 295.96 Q256.00 300.40 248.31 295.96 L225.24 282.64 Q217.55 278.20 217.55 269.32 L217.55 242.68 Q217.55 233.80 225.24 229.36 Z" fill="#7a1951"/><path d="M291.03 290.04 Q298.72 285.60 306.41 290.04 L329.48 303.36 Q337.17 307.80 337.17 316.68 L337.17 343.32 Q337.17 352.20 329.48 356.64 L306.41 369.96 Q298.72 374.39 291.03 369.96 L267.96 356.64 Q260.27 352.20 260.27 343.32 L260.27 316.68 Q260.27 307.80 267.96 303.36 Z" fill="#871b4d"/><path d="M333.75 364.04 Q341.44 359.60 349.13 364.04 L372.20 377.35 Q379.89 381.79 379.89 390.67 L379.89 417.31 Q379.89 426.19 372.20 430.63 L349.13 443.95 Q341.44 448.39 333.75 443.95 L310.68 430.63 Q302.99 426.19 302.99 417.31 L302.99 390.67 Q302.99 381.79 310.68 377.35 Z" fill="#951d4a"/><path d="M248.31 68.05 Q256.00 63.61 263.69 68.05 L286.76 81.37 Q294.45 85.81 294.45 94.69 L294.45 121.33 Q294.45 130.21 286.76 134.65 L263.69 147.96 Q256.00 152.40 248.31 147.96 L225.24 134.65 Q217.55 130.21 217.55 121.33 L217.55 94.69 Q217.55 85.81 225.24 81.37 Z" fill="#691756"/><path d="M291.03 142.04 Q298.72 137.61 306.41 142.04 L329.48 155.36 Q337.17 159.80 337.17 168.68 L337.17 195.32 Q337.17 204.20 329.48 208.64 L306.41 221.96 Q298.72 226.40 291.03 221.96 L267.96 208.64 Q260.27 204.20 260.27 195.32 L260.27 168.68 Q260.27 159.80 267.96 155.36 Z" fill="#771952"/><path d="M333.75 216.04 Q341.44 211.60 349.13 216.04 L372.20 229.36 Q379.89 233.80 379.89 242.68 L379.89 269.32 Q379.89 278.20 372.20 282.64 L349.13 295.96 Q341.44 300.40 333.75 295.96 L310.68 282.64 Q302.99 278.20 302.99 269.32 L302.99 242.68 Q302.99 233.80 310.68 229.36 Z" fill="#841a4e"/><path d="M376.48 290.04 Q384.17 285.60 391.86 290.04 L414.93 303.36 Q422.62 307.80 422.62 316.68 L422.62 343.32 Q422.62 352.20 414.93 356.64 L391.86 369.96 Q384.17 374.39 376.48 369.96 L353.41 356.64 Q345.72 352.20 345.72 343.32 L345.72 316.68 Q345.72 307.80 353.41 303.36 Z" fill="#921c4b"/><path d="M333.75 68.05 Q341.44 63.61 349.13 68.05 L372.20 81.37 Q379.89 85.81 379.89 94.69 L379.89 121.33 Q379.89 130.21 372.20 134.65 L349.13 147.96 Q341.44 152.40 333.75 147.96 L310.68 134.65 Q302.99 130.21 302.99 121.33 L302.99 94.69 Q302.99 85.81 310.68 81.37 Z" fill="#741853"/><path d="M376.48 142.04 Q384.17 137.61 391.86 142.04 L414.93 155.36 Q422.62 159.80 422.62 168.68 L422.62 195.32 Q422.62 204.20 414.93 208.64 L391.86 221.96 Q384.17 226.40 376.48 221.96 L353.41 208.64 Q345.72 204.20 345.72 195.32 L345.72 168.68 Q345.72 159.80 353.41 155.36 Z" fill="#811a4f"/><path d="M419.20 216.04 Q426.89 211.60 434.58 216.04 L457.65 229.36 Q465.34 233.80 465.34 242.68 L465.34 269.32 Q465.34 278.20 457.65 282.64 L434.58 295.96 Q426.89 300.40 419.20 295.96 L396.13 282.64 Q388.44 278.20 388.44 269.32 L388.44 242.68 Q388.44 233.80 396.13 229.36 Z" fill="#8e1c4c"/></svg><span>Jackson Martin Forecasts</span></a>
+  </div>
+
+  <div class="ctl-row">
+    <div class="grp"><span class="k">View</span>
+      <div class="seg" role="group" aria-label="Map type">
+        <button type="button" id="v-map" aria-pressed="true">Map</button>
+        <button type="button" id="v-hex" aria-pressed="false">Hex grid</button>
+      </div></div>
+    <div class="grp"><span class="k">President</span>
+      <div class="seg" role="group" aria-label="Presidential results">
+        <button type="button" data-ds="p2016" aria-pressed="false">2016</button>
+        <button type="button" data-ds="p2020" aria-pressed="false">2020</button>
+        <button type="button" data-ds="p2024" aria-pressed="true">2024</button>
+      </div></div>
+    <div class="grp"><span class="k">House, implied</span>
+      <div class="seg" role="group" aria-label="Implied US House results">
+        <button type="button" data-ds="h2016" aria-pressed="false">2016</button>
+        <button type="button" data-ds="h2018" aria-pressed="false">2018</button>
+        <button type="button" data-ds="h2020" aria-pressed="false">2020</button>
+        <button type="button" data-ds="h2022" aria-pressed="false">2022</button>
+        <button type="button" data-ds="h2024" aria-pressed="false">2024</button>
+        <button type="button" data-ds="h2026" aria-pressed="false">2026</button>
+      </div></div>
+    <div class="grp"><span class="k">What if</span>
+      <div class="whatif" id="whatif" title="The 2026 pattern, shifted to any national environment"><span class="end">D+20</span><input type="range" id="env" min="-20" max="20" step="0.5" value="13" aria-label="Hypothetical national House environment, D+20 to R+20">
+        <span class="end">R+20</span><output id="env-out" for="env">R+13</output></div></div>
+  </div>
+
+  <div class="seat-head">
+    <div class="party"><span class="lbl D">Democrats</span><div class="row"><span class="big D" id="d-seats">–</span><span class="sub" id="d-sub"></span></div></div>
+    <div class="title-block"><h1>US House Fair Maps</h1><p id="ds-label">Proposed districts, 2024 presidential result</p></div>
+    <div class="party rr"><span class="lbl R">Republicans</span><div class="row"><span class="big R" id="r-seats">–</span><span class="sub" id="r-sub"></span></div></div>
+  </div>
+  <div>
+    <div class="seatbar" id="seatbar"></div>
+    <div class="seatbar-labels" id="seatbar-labels"></div>
+  </div>
+
+  <div class="main">
+    <div class="mapcol" style="display:flex;flex-direction:column;gap:12px;min-width:0">
+      <div class="mapcard" id="mapcard">
+        <div class="zbtns">
+          <button type="button" id="z-in" aria-label="Zoom in">+</button>
+          <button type="button" id="z-out" aria-label="Zoom out">−</button>
+          <button type="button" id="z-us" class="us" aria-label="Show the whole country">US</button>
+        </div>
+        <svg id="map" role="img" aria-label="Map of US House districts"><g class="loading-g"></g></svg>
+        <span class="maphint" id="maphint">Click a state to zoom · scroll or pinch to zoom</span>
+      </div>
+      <div id="legend"></div>
+    </div>
+
+    <aside class="side" aria-label="District details">
+      <label class="k" for="pick">Select a district</label>
+      <select id="pick"><option>Loading…</option></select>
+      <div class="card" id="card"><div class="loading">Loading districts…</div></div>
+    </aside>
+  </div>
+
+  <section>
+    <div class="sec-head"><h2>Map progress</h2><p id="prog-dek">Each state, with its number of seats after the 2020 census. Click one to zoom to it.</p></div>
+    <div class="keys"><span><i class="p"></i>Proposed map drawn</span><span><i class="a"></i>At-large (one seat, nothing to draw)</span><span><i></i>Not drawn yet</span></div>
+    <div class="prog" id="prog"></div>
+  </section>
+
+  <section id="fair" aria-labelledby="fair-h">
+    <div class="sec-head"><h2 id="fair-h">Is it fair?</h2><p>How the proposed districts compare with the lines actually used, measured on the presidential vote so candidates and incumbency don’t muddy the comparison. Every measure uses the two-party vote.</p></div>
+    <div class="grp"><span class="k">Presidential baseline</span>
+      <div class="seg" role="group" aria-label="Presidential baseline for the fairness measures" id="fair-year">
+        <button type="button" data-y="2016" aria-pressed="false">2016</button>
+        <button type="button" data-y="2020" aria-pressed="false">2020</button>
+        <button type="button" data-y="2024" aria-pressed="true">2024</button>
+      </div></div>
+    <p class="fair-sum" id="fair-sum"></p>
+    <div class="tblwrap"><table class="ftab" id="fair-tab"></table></div>
+    <figure class="fair-fig">
+      <figcaption id="fair-cap"></figcaption>
+      <div id="fair-chart"></div>
+      <div class="fair-keys" id="fair-keys"></div>
+    </figure>
+    <h3>Why each House year lands where it does</h3>
+    <p class="fair-sum" id="fair-house-dek"></p>
+    <div class="tblwrap"><table class="ftab" id="fair-house"></table></div>
+    <details class="fair-st"><summary>State by state</summary>
+      <div class="tblwrap"><table class="ftab" id="fair-states"></table></div>
+    </details>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>How the numbers work</h2></div>
+    <div class="method">
+      <p><b>Margins</b> are the Republican share minus the Democratic share of all votes cast. R+8 means the Republican won by 8 points; the map shades from D+30 to R+30 and saturates past that.</p>
+      <p><b>Implied House results.</b> Redrawn districts never held a House election, so each one starts from its own presidential margin and adds how far House candidates ran ahead of or behind the top of the ticket in the real districts its voters came from. 2016–18 are measured against the 2016 presidential result, 2020–22 against 2020, and 2024–26 against 2024. Races with no Democrat-vs-Republican matchup borrow the state’s average gap.</p>
+      <p><b>Matching voters between old and new lines</b> uses counties (state House districts in Kansas), rescaled to match each district’s exact presidential totals, so it’s approximate in big metros and in New England.</p>
+      <p id="as-of"></p>
+    </div>
+  </section>
+
+  <footer>Maps and site by Jackson Martin · District data via Dave’s Redistricting App · House results: FiveThirtyEight election-results archive (2016–24); unofficial 2026 returns from KWCH, Poliwave, The Green Papers, Decision Desk HQ, Wikipedia, Ballotpedia and the New York Times · State outlines: US Census via us-atlas</footer>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+// =====================================================================
+// CONFIG
+// =====================================================================
+const DATASETS = {
+  p2016: { kind: "pres", year: 2016, label: "2016 presidential result" },
+  p2020: { kind: "pres", year: 2020, label: "2020 presidential result" },
+  p2024: { kind: "pres", year: 2024, label: "2024 presidential result" },
+  h2016: { kind: "house", year: 2016, label: "Implied 2016 US House result" },
+  h2018: { kind: "house", year: 2018, label: "Implied 2018 US House result" },
+  h2020: { kind: "house", year: 2020, label: "Implied 2020 US House result" },
+  h2022: { kind: "house", year: 2022, label: "Implied 2022 US House result" },
+  h2024: { kind: "house", year: 2024, label: "Implied 2024 US House result" },
+  h2026: { kind: "house", year: 2026, label: "Implied 2026 US House result (unofficial returns)" },
+  // the 2026 pattern with every district shifted the same amount toward Republicans until the nation is R+13
+  env: { kind: "house", year: 2026, hypo: 0.13, label: "" },
+};
+// where the 2026 national House vote is expected to land once counting finishes (R minus D);
+// the what-if slider treats the 2026 map as this environment and shifts every district from there
+const ENV_2026 = -0.135;
+function setupHypo() {
+  DATASETS.env.base = ENV_2026;
+  setEnv(+$("env").value);
+}
+function setEnv(v) {   // v: national House margin in points, negative = D
+  const H = DATASETS.env, txt = v === 0 ? "Even" : (v < 0 ? "D+" : "R+") + Math.abs(v);
+  H.hypo = v / 100; H.shift = H.hypo - H.base; H.txt = txt;
+  H.nation = v === 0 ? "an evenly split nation" : `${v > 0 ? "an" : "a"} ${txt} nation`;
+  H.label = v === 0 ? "Hypothetical evenly split House environment (2026 pattern, shifted)" : `Hypothetical ${txt} House environment (2026 pattern, shifted)`;
+  $("env-out").textContent = txt;
+}
+const PRES_CANDS = { 2016: ["Clinton", "Trump"], 2020: ["Biden", "Trump"], 2024: ["Harris", "Trump"] };
+const RAMP_D = ["#ffffff", "#bcbdee", "#6870dc", "#0d3eca", "#031c69"];
+const RAMP_R = ["#ffffff", "#f1b6b3", "#e7786e", "#dc4f3f", "#73241c"];
+const RAMP_I = ["#ffffff", "#f6d9ad", "#eaab55", "#d97706", "#7c4303"];   // independent / third party on the non-Republican side
+const PARTY_NAME = { I: "independent", L: "Libertarian", C: "Constitution Party", D: "Democrat" };
+const MARGIN_CAP = 0.30, FLOOR = 0.10, CONTESTED_MAX = 0.95;
+const MAJORITY = 218, TOTAL = 435;
+const VB = { w: 975, h: 610 };
+
+const DEMO_COLORS = {
+  race: ["#8d99ae", "#e69f00", "#009e73", "#cc79a7", "#d4cfc4"],
+  edu: ["#a8cbd6", "#6ea5b8", "#3a7c95", "#1c4f64"],
+  age: ["#e2bf7f", "#c8913f", "#96621f", "#5f3b11"],
+  inc: ["#d9dee7", "#a7b3c6", "#6f819e", "#3f4f6b"],
+  home: ["#3a7c95", "#e69f00"],
+};
+const INC_EDGES = [0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 75, 100, 125, 150, 200, Infinity];
+const AGE_EDGES = [0, 5, 10, 15, 18, 20, 21, 22, 25, 30, 35, 40, 45, 50, 55, 60, 62, 65, 67, 70, 75, 80, 85, 100];
+const DENSITY_TIERS = [[3000, "Urban"], [800, "Suburban / small city"], [100, "Exurban / small town"], [0, "Rural"]];
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const hexToRgb = h => { const c = parseInt(h.slice(1), 16); return [(c >> 16) & 255, (c >> 8) & 255, c & 255]; };
+const rgbToHex = (r, g, b) => "#" + [r, g, b].map(x => Math.round(x).toString(16).padStart(2, "0")).join("");
+function ramp(cmap, t) {
+  t = Math.max(0, Math.min(1, t));
+  const n = cmap.length - 1, x = t * n, i = Math.min(Math.floor(x), n - 1), f = x - i;
+  const a = hexToRgb(cmap[i]), b = hexToRgb(cmap[i + 1]);
+  return rgbToHex(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f);
+}
+function marginColor(m, unc, opp) {
+  const party = m < 0 ? "D" : "R";
+  const shade = unc ? 1 : FLOOR + (CONTESTED_MAX - FLOOR) * Math.min(Math.abs(m) / MARGIN_CAP, 1);
+  return ramp(party === "R" ? RAMP_R : opp ? RAMP_I : RAMP_D, shade);
+}
+function lum(hex) { const [r, g, b] = hexToRgb(hex).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+const fmtM = m => m == null || !isFinite(m) ? "—" : (Math.abs(m) < 0.0005 ? "Even" : (m < 0 ? "D+" : "R+") + (Math.abs(m) * 100).toFixed(1));
+const cls = m => m == null ? "" : m < 0 ? "D" : "R";
+const pct = (x, d = 1) => x == null || !isFinite(x) ? "—" : (x * 100).toFixed(d) + "%";
+const ordinal = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+function mbar(m) {
+  if (m == null) return "";
+  const w = Math.min(Math.abs(m) / MARGIN_CAP, 1) * 50;
+  return `<span class="mbar" aria-hidden="true"><i style="${m < 0 ? `right:50%` : `left:50%`};width:${w}%;background:${marginColor(m)}"></i></span>`;
+}
+async function getJSON(u) { const r = await fetch(u); if (!r.ok) throw new Error(u + " " + r.status); return r.json(); }
+
+// =====================================================================
+// STATE
+// =====================================================================
+let NAT = null;                 // national.json
+const ST = {};                  // state abbr -> state file
+const DIST = {};                // district id -> district (with .st)
+let ORDER = [];                 // district ids in display order
+const HEXD = {};                // hex cell index -> district
+let ui = { view: "map", ds: "p2024", sel: null, selState: null, tab: "results" };
+
+// value of a district for a dataset -> { m, unc, pending, winner }
+function valueOf(d, ds) {
+  const D = DATASETS[ds];
+  if (D.kind === "pres") {
+    const p = d.pres && d.pres[D.year];
+    if (!p) return { pending: true };
+    const m = (p[1] - p[0]) / p[2];
+    return { m, winner: m < 0 ? "D" : "R" };
+  }
+  const h = d.house && d.house[D.year];
+  if (!h) return { pending: true };
+  if (D.hypo != null) {
+    if (h.m == null) return { pending: true };
+    const m = h.m + D.shift;
+    return { m, winner: m < 0 ? "D" : "R", hypo: true, opp: h.dp && h.dp !== "D" ? h.dp : null, oppName: h.dc };
+  }
+  if (h.m == null) {
+    if (h.unc) return { m: h.unc === "D" ? -1 : 1, unc: true, winner: h.unc };   // implied from an unopposed race
+    if (h.actual && h.h) {   // a race with no D-vs-R matchup
+      const winner = h.h[0] > h.h[1] ? "D" : "R";
+      return { m: winner === "D" ? -1 : 1, unc: true, winner };
+    }
+    return { pending: true };
+  }
+  // an independent or third-party candidate running in place of a Democrat counts on the D side
+  return { m: h.m, winner: h.m < 0 ? "D" : "R", opp: h.dp && h.dp !== "D" ? h.dp : null, oppName: h.dc };
+}
+function fillFor(d) {
+  const v = valueOf(d, ui.ds);
+  if (v.pending) return "url(#pend)";
+  return marginColor(v.m, v.unc, v.opp);
+}
+
+// =====================================================================
+// DEMOGRAPHICS (same derivations as the Kansas House site)
+// =====================================================================
+function binMedian(counts, edges) {
+  const tot = counts.reduce((a, b) => a + b, 0);
+  if (!tot) return NaN;
+  let cum = 0;
+  for (let i = 0; i < counts.length; i++) {
+    if (cum + counts[i] >= tot / 2) {
+      if (!isFinite(edges[i + 1])) return edges[i];
+      return edges[i] + ((tot / 2 - cum) / counts[i]) * (edges[i + 1] - edges[i]);
+    }
+    cum += counts[i];
+  }
+  return NaN;
+}
+function demoDerive(r) {
+  const sum = (arr, i, j) => arr.slice(i, j).reduce((x, y) => x + y, 0);
+  const share = arr => { const t = arr.reduce((x, y) => x + y, 0); return arr.map(v => (t > 0 ? v / t : 0)); };
+  const eduTot = sum(r.edu, 0, 8), allAge = sum(r.age, 0, 23);
+  const out = {
+    race: share(r.race),
+    edu: share([sum(r.edu, 0, 2), sum(r.edu, 2, 4), r.edu[4], sum(r.edu, 5, 8)]),
+    bachPlus: eduTot > 0 ? sum(r.edu, 4, 8) / eduTot : NaN,
+    age: share([sum(r.age, 4, 9), sum(r.age, 9, 12), sum(r.age, 12, 17), sum(r.age, 17, 23)]),
+    under18: allAge > 0 ? sum(r.age, 0, 4) / allAge : NaN,
+    medAge: binMedian(r.age, AGE_EDGES),
+    inc: share([sum(r.inc, 0, 9), sum(r.inc, 9, 12), sum(r.inc, 12, 15), r.inc[15]]),
+    medInc: binMedian(r.inc, INC_EDGES),
+    density: r.land > 0 ? r.pop / r.land : NaN,
+  };
+  if (r.housing) {
+    const h = r.housing, hh = (h.own || 0) + (h.rent || 0);
+    out.home = hh > 0 ? [h.own / hh, h.rent / hh] : null;
+    out.alone = hh > 0 && h.alone != null ? h.alone / hh : NaN;
+    out.kids = hh > 0 && h.kids != null ? h.kids / hh : NaN;
+  }
+  return out;
+}
+let RANKS = {}, RANK_N = 0;
+function buildDemo() {
+  for (const st of Object.values(ST)) {
+    const ds = st.districts.filter(d => d.demo);
+    if (!ds.length) continue;
+    const sumArr = k => ds[0].demo[k].map((_, i) => ds.reduce((a, d) => a + d.demo[k][i], 0));
+    const raw = { race: sumArr("race"), edu: sumArr("edu"), age: sumArr("age"), inc: sumArr("inc"),
+      pop: ds.reduce((a, d) => a + d.demo.pop, 0), land: ds.reduce((a, d) => a + (d.demo.land || 0), 0) };
+    if (ds.every(d => d.demo.housing)) {
+      raw.housing = {};
+      for (const k of Object.keys(ds[0].demo.housing)) raw.housing[k] = ds.reduce((a, d) => a + (d.demo.housing[k] || 0), 0);
+    }
+    st.demoState = demoDerive(raw);
+    for (const d of ds) d.demoD = demoDerive(d.demo);
+  }
+  const all = Object.values(DIST).filter(d => d.demoD);
+  RANK_N = all.length;
+  for (const m of ["bachPlus", "medInc", "medAge", "density"]) {
+    RANKS[m] = {};
+    all.filter(d => isFinite(d.demoD[m])).sort((a, b) => b.demoD[m] - a.demoD[m]).forEach((d, i) => { RANKS[m][d.id] = i + 1; });
+  }
+}
+function demoHTML(d) {
+  const st = ST[d.st];
+  if (!d.demoD || !st.demoState) {
+    return `<p class="note">Demographics aren’t loaded for ${esc(st.name)} yet. They come in with the state’s DRA district-data export.</p>`;
+  }
+  const D = d.demoD, S = st.demoState, ab = d.st;
+  const P = x => (isFinite(x) ? Math.round(x * 100) + "%" : "—");
+  const inc = k => (!isFinite(k) ? "—" : k >= 200 ? "$200k+" : "$" + Math.round(k) + "k");
+  const dens = x => (!isFinite(x) ? "—" : x >= 100 ? Math.round(x).toLocaleString("en-US") : x.toFixed(1));
+  const n0 = x => (isFinite(x) ? x.toFixed(0) : "—");
+  const tier = x => (isFinite(x) ? DENSITY_TIERS.find(([t]) => x >= t)[1] : "");
+  const rk = (m, phrase) => (RANKS[m] && RANKS[m][d.id] ? `#${RANKS[m][d.id]} ${phrase}` : "");
+  const tile = (label, value, sub, rank) => `<div class="demo-tile"><div class="tile-label">${label}</div><div class="tile-val">${value}</div><div class="tile-sub">${sub}</div><div class="tile-rank">${rank}</div></div>`;
+  const bar = (title, labels, colors, dv, sv, note = "") => {
+    const segs = v => v.map((x, i) => (x > 0 ? `<div class="h-seg" style="width:${(x * 100).toFixed(2)}%;background:${colors[i]}" title="${labels[i]}: ${(x * 100).toFixed(1)}%"></div>` : "")).join("");
+    const legend = labels.map((l, i) => `<div class="dl-item" title="${esc(st.name)}: ${(sv[i] * 100).toFixed(1)}%"><div class="dl-box" style="background:${colors[i]}"></div>${l} <span>${Math.round(dv[i] * 100)}%</span></div>`).join("");
+    return `<div class="demo-block"><div class="demo-title">${title}</div>
+      <div class="bar-row"><span class="bar-tag">${esc(d.id)}</span><div class="h-stack">${segs(dv)}</div></div>
+      <div class="bar-row"><span class="bar-tag">${ab}</span><div class="h-stack ks">${segs(sv)}</div></div>
+      <div class="demo-legend">${legend}</div>${note ? `<div class="demo-note">${note}</div>` : ""}</div>`;
+  };
+  let h = `<div class="demo-tiles">
+    ${tile("Bachelor’s+", P(D.bachPlus), `${esc(st.name)} ${P(S.bachPlus)}`, rk("bachPlus", "most educated"))}
+    ${tile("Median income", inc(D.medInc), `${esc(st.name)} ${inc(S.medInc)}`, rk("medInc", "highest income"))}
+    ${tile("Median age", n0(D.medAge), `${esc(st.name)} ${n0(S.medAge)}`, rk("medAge", "oldest"))}
+    ${tile("People / sq mi", dens(D.density), `${tier(D.density)} · ${esc(st.name)} ${dens(S.density)}`, rk("density", "densest"))}</div>`;
+  h += bar("Race & ethnicity · eligible voters", ["White", "Hispanic", "Black", "Asian", "Other"], DEMO_COLORS.race, D.race, S.race);
+  h += bar("Education · adults 25+", ["HS or less", "Some college", "Bachelor’s", "Post-grad"], DEMO_COLORS.edu, D.edu, S.edu);
+  h += bar("Age · adults 18+", ["18–29", "30–44", "45–64", "65+"], DEMO_COLORS.age, D.age, S.age, `Under 18: ${P(D.under18)} of residents (${esc(st.name)} ${P(S.under18)})`);
+  h += bar("Household income", ["<$50k", "$50–100k", "$100–200k", "$200k+"], DEMO_COLORS.inc, D.inc, S.inc);
+  if (D.home && S.home) h += bar("Housing", ["Own", "Rent"], DEMO_COLORS.home, D.home, S.home,
+    `Live alone: ${P(D.alone)} of households (${esc(st.name)} ${P(S.alone)}) · Families with kids: ${P(D.kids)} (${esc(st.name)} ${P(S.kids)})`);
+  return h + `<div class="demo-source">Ranks are among the ${RANK_N} mapped districts with demographic data. Eligible voters: 2024 CVAP. Education, age, income: 2022 ACS. Density: 2020 census population over land area. Via DRA.</div>`;
+}
+
+// =====================================================================
+// MAP
+// =====================================================================
+const svg = d3.select("#map");
+let zoomG = null, zoom = null, curK = 1, hexBox = null;
+
+function setupSVG(w, h) {
+  svg.attr("viewBox", `0 0 ${w} ${h}`).selectAll("*").remove();
+  const defs = svg.append("defs");
+  const pt = defs.append("pattern").attr("id", "pend").attr("patternUnits", "userSpaceOnUse").attr("width", 5).attr("height", 5).attr("patternTransform", "rotate(45)");
+  pt.append("rect").attr("width", 5).attr("height", 5).attr("fill", "var(--blank)");
+  pt.append("line").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", 5).attr("stroke", "var(--state-line)").attr("stroke-width", 1.2).attr("stroke-opacity", .55);
+  svg.append("rect").attr("width", w).attr("height", h).attr("fill", "transparent").on("click", () => { hideTip(); clearSelection(); });
+  zoomG = svg.append("g").attr("class", "zg");
+  zoom = d3.zoom().scaleExtent([1, 30]).translateExtent([[-w * 0.1, -h * 0.1], [w * 1.1, h * 1.1]])
+    .on("zoom", ev => { zoomG.attr("transform", ev.transform); curK = ev.transform.k; onZoomLabels(); });
+  svg.call(zoom).on("dblclick.zoom", null);
+}
+function stateClickable(ab) { return !!NAT.states[ab]; }
+
+function drawGeo() {
+  setupSVG(VB.w, VB.h);
+  const g = zoomG;
+  // blank state fills (drawn under everything)
+  g.append("g").selectAll("path").data(Object.entries(NAT.states)).join("path")
+    .attr("class", ([ab]) => "st click").attr("d", ([, s]) => s.path).attr("data-st", ([ab]) => ab)
+    .on("click", (ev, [ab]) => { ev.stopPropagation(); selectState(ab, true); })
+    .on("mousemove", (ev, [ab]) => stateTip(ev, ab)).on("mouseleave", hideTip);
+  // clip each state's districts to its outline so lines over the ocean or bays are cut away
+  const defs = svg.select("defs");
+  for (const [ab, s] of Object.entries(NAT.states)) defs.append("clipPath").attr("id", "cl-" + ab).append("path").attr("d", s.path);
+  // districts: proposed shapes, or the whole state for at-large
+  const feats = [];
+  for (const id of ORDER) { const d = DIST[id]; feats.push({ d, path: d.path || NAT.states[d.st].path }); }
+  g.append("g").selectAll("path").data(feats).join("path").attr("class", "dist").attr("data-id", f => f.d.id)
+    .attr("d", f => f.path).attr("clip-path", f => f.d.path ? `url(#cl-${f.d.st})` : null)
+    .on("click", (ev, f) => { ev.stopPropagation(); f.d.id === ui.sel ? clearSelection() : selectDistrict(f.d.id, { zoomTo: curK < 1.5 }); })
+    .on("mousemove", (ev, f) => distTip(ev, f.d)).on("mouseleave", hideTip);
+  g.append("g").selectAll("path").data(Object.values(NAT.states)).join("path").attr("class", "stl").attr("d", s => s.path);
+  g.append("path").attr("class", "selring").attr("id", "selring");
+  // district labels for proposed states (shown when zoomed in enough)
+  const lab = g.append("g").attr("class", "labs");
+  for (const id of ORDER) {
+    const d = DIST[id];
+    if (!d.path) continue;
+    lab.append("text").attr("class", "dlab").attr("data-id", id).attr("x", d.lp[0]).attr("y", d.lp[1])
+      .attr("text-anchor", "middle").attr("dominant-baseline", "central").text(d.n);
+  }
+  paint();
+}
+
+const HEX_DIRS = { even: [[1, 0], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1]], odd: [[1, 0], [1, 1], [0, 1], [-1, 0], [0, -1], [1, -1]] };
+function drawHex() {
+  const cells = NAT.hex.cells, R = NAT.hex.R;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const c of cells) { x0 = Math.min(x0, c[0]); y0 = Math.min(y0, c[1]); x1 = Math.max(x1, c[0]); y1 = Math.max(y1, c[1]); }
+  // extra room on the right so the zoom buttons don't sit on New England
+  const pad = R * 1.4, w = x1 - x0 + 2 * pad + R * 5, h = y1 - y0 + 2 * pad;
+  hexBox = { x0: x0 - pad, y0: y0 - pad, w, h };
+  setupSVG(w, h);
+  const g = zoomG.append("g").attr("transform", `translate(${-hexBox.x0},${-hexBox.y0})`);
+  const byCell = HEXD;
+  const corner = (x, y, i, r) => [x + r * Math.cos(Math.PI / 180 * (60 * i - 30)), y + r * Math.sin(Math.PI / 180 * (60 * i - 30))];
+  const hexPath = (x, y, r) => "M" + [0, 1, 2, 3, 4, 5].map(i => corner(x, y, i, r).map(v => v.toFixed(2)).join(",")).join("L") + "Z";
+  g.append("g").selectAll("path").data(cells.map((c, i) => ({ c, i, d: byCell[i] }))).join("path")
+    .attr("class", o => "hex " + (o.d ? "has dist" : "blank click")).attr("data-id", o => o.d ? o.d.id : null)
+    .attr("data-st", o => o.c[2]).attr("d", o => hexPath(o.c[0], o.c[1], R))
+    .on("click", (ev, o) => { ev.stopPropagation(); if (o.d) (o.d.id === ui.sel ? clearSelection() : selectDistrict(o.d.id, { zoomTo: false })); else selectState(o.c[2], false); })
+    .on("mousemove", (ev, o) => o.d ? distTip(ev, o.d) : stateTip(ev, o.c[2])).on("mouseleave", hideTip);
+  // state borders: hex edges whose neighbour belongs to another state (or nothing)
+  // each state sits on its own little lattice, so neighbours are looked up within the state
+  const key = {}; cells.forEach(c => { key[c[2] + ":" + c[3] + "," + c[4]] = c[2]; });
+  let bd = "";
+  for (const c of cells) {
+    const dirs = HEX_DIRS[Math.abs(c[4]) % 2 ? "odd" : "even"];
+    // edge k sits between corners k and k+1; directions above are listed in the same order (E, SE, SW, W, NW, NE)
+    dirs.forEach(([dq, dr], k) => {
+      const nb = key[c[2] + ":" + (c[3] + dq) + "," + (c[4] + dr)];
+      if (nb !== c[2]) { const a = corner(c[0], c[1], k, R), b = corner(c[0], c[1], k + 1, R); bd += `M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`; }
+    });
+  }
+  g.append("path").attr("class", "hexb").attr("d", bd);
+  g.append("path").attr("class", "selring").attr("id", "selring");
+  // labels: state abbreviation at the hex nearest each state's centre; district numbers on drawn states
+  const lab = g.append("g").attr("class", "labs");
+  const groups = d3.group(cells.map((c, i) => ({ c, i })), o => o.c[2]);
+  for (const [ab, arr] of groups) {
+    const mx = d3.mean(arr, o => o.c[0]), my = d3.mean(arr, o => o.c[1]);
+    const best = arr.reduce((a, o) => (Math.hypot(o.c[0] - mx, o.c[1] - my) < Math.hypot(a.c[0] - mx, a.c[1] - my) ? o : a));
+    const drawn = arr.some(o => byCell[o.i]);
+    for (const o of arr) {
+      const d = byCell[o.i];
+      if (d && d.path) {
+        lab.append("text").attr("class", "dlab hexnum").attr("data-id", d.id).attr("x", o.c[0]).attr("y", o.c[1] + (o === best ? R * 0.28 : 0))
+          .attr("text-anchor", "middle").attr("dominant-baseline", "central").attr("font-size", R * 0.62).text(d.n);
+      }
+    }
+    lab.append("text").attr("class", "slab").attr("data-st", ab).attr("data-cell", byCell[best.i] ? best.i : null)
+      .attr("x", best.c[0]).attr("y", best.c[1] - (drawn && byCell[best.i] && byCell[best.i].path ? R * 0.32 : 0))
+      .attr("text-anchor", "middle").attr("dominant-baseline", "central").attr("font-size", R * (drawn && byCell[best.i] && byCell[best.i].path ? 0.5 : 0.62)).text(ab);
+  }
+  paint();
+}
+
+function paint() {
+  if (!zoomG) return;
+  zoomG.selectAll(".dist").attr("fill", function () { return fillFor(DIST[this.getAttribute("data-id")]); })
+    .attr("data-ind", function () { return valueOf(DIST[this.getAttribute("data-id")], ui.ds).opp ? 1 : null; });
+  zoomG.selectAll(".slab").style("fill", function () {
+    const c = this.getAttribute("data-cell");
+    const d = c != null && HEXD[c];
+    if (!d) return null;
+    const f = fillFor(d);
+    return f.startsWith("#") && lum(f) < 0.22 ? "#fff" : "#1c2230";
+  });
+  zoomG.selectAll(".dlab").attr("fill", function () { const f = fillFor(DIST[this.getAttribute("data-id")]); return f.startsWith("#") && lum(f) < 0.22 ? "#fff" : "#1c2230"; });
+  onZoomLabels();
+  markSelected();
+}
+function onZoomLabels() {
+  if (!zoomG) return;
+  if (ui.view === "map") {
+    const fs = 13 / curK;
+    zoomG.selectAll(".dlab").attr("font-size", fs).attr("display", function () {
+      const d = DIST[this.getAttribute("data-id")];
+      if (!d._bb) { const el = zoomG.select(`.dist[data-id="${d.id}"]`).node(); d._bb = el ? el.getBBox() : { width: 0, height: 0 }; }
+      return Math.min(d._bb.width, d._bb.height) * curK > 30 ? null : "none";
+    });
+  }
+}
+function markSelected() {
+  const ring = zoomG && zoomG.select("#selring");
+  if (!ring || ring.empty()) return;
+  const d = ui.sel && DIST[ui.sel];
+  if (!d) { ring.attr("d", null); return; }
+  const el = zoomG.select(`.dist[data-id="${d.id}"]`).node();
+  ring.attr("d", el ? el.getAttribute("d") : null).attr("clip-path", el ? el.getAttribute("clip-path") : null);
+}
+function zoomToBox(b, maxK = 10) {
+  const W = +svg.attr("viewBox").split(" ")[2], H = +svg.attr("viewBox").split(" ")[3];
+  const dx = b[2] - b[0], dy = b[3] - b[1];
+  const k = Math.max(1, Math.min(maxK, 0.82 / Math.max(dx / W, dy / H)));
+  const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+  const t = d3.zoomIdentity.translate(W / 2, H / 2).scale(k).translate(-cx, -cy);
+  svg.transition().duration(matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 650).call(zoom.transform, t);
+}
+function zoomToState(ab) {
+  if (ui.view === "map") return zoomToBox(NAT.states[ab].bbox, 12);
+  const cs = NAT.hex.cells.filter(c => c[2] === ab), R = NAT.hex.R;
+  const b = [d3.min(cs, c => c[0]) - R * 3 - hexBox.x0, d3.min(cs, c => c[1]) - R * 3 - hexBox.y0, d3.max(cs, c => c[0]) + R * 3 - hexBox.x0, d3.max(cs, c => c[1]) + R * 3 - hexBox.y0];
+  zoomToBox(b, 5);
+}
+
+// tooltip
+const tip = $("tip");
+function placeTip(ev) {
+  const pad = 14, r = tip.getBoundingClientRect();
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - pad;
+  tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px";
+}
+function distTip(ev, d) {
+  if (ev.pointerType && ev.pointerType !== "mouse") return;
+  const v = valueOf(d, ui.ds), D = DATASETS[ui.ds];
+  let sub = "";
+  if (v.pending) sub = D.kind === "house" ? "No result yet" : "No data";
+  else if (v.unc) sub = "No Democrat-vs-Republican race";
+  else if (D.kind === "pres") { const p = d.pres[D.year]; sub = `${PRES_CANDS[D.year][0]} ${pct(p[0] / p[2])} · ${PRES_CANDS[D.year][1]} ${pct(p[1] / p[2])}`; }
+  else if (v.opp) sub = `Actual result · vs. ${PARTY_NAME[v.opp]} ${esc(v.oppName)}`;
+  else if (D.hypo != null) sub = `2026 implied ${fmtM(d.house[2026].m)} · shifted ${fmtM(D.shift)}`;
+  else sub = d.house[D.year].actual ? "Actual result" : `Pres. baseline ${fmtM(d.house[D.year].base)} · swing ${fmtM(d.house[D.year].adj)}`;
+  tip.innerHTML = `<div class="h">${esc(d.id)}<span class="${cls(v.m)}">${v.pending ? "—" : v.unc ? "Unc." : fmtM(v.m)}</span></div><div class="m">${esc(ST[d.st].name)} · ${esc(D.label.replace(" (unofficial returns)", ""))}</div><div class="m">${sub}</div>`;
+  tip.hidden = false; placeTip(ev);
+}
+function stateTip(ev, ab) {
+  if (ev.pointerType && ev.pointerType !== "mouse") return;
+  const s = NAT.states[ab];
+  tip.innerHTML = `<div class="h">${esc(s.name)}<span>${s.seats} seat${s.seats > 1 ? "s" : ""}</span></div><div class="m">${ST[ab] ? "Map drawn" : "Not drawn yet"}</div>`;
+  tip.hidden = false; placeTip(ev);
+}
+function hideTip() { tip.hidden = true; }
+
+// =====================================================================
+// HEADER, LEGEND, PROGRESS
+// =====================================================================
+function renderHeader() {
+  const D = DATASETS[ui.ds];
+  $("ds-label").textContent = "Proposed districts · " + D.label;
+  let dW = 0, rW = 0, pend = 0;
+  for (const id of ORDER) { const v = valueOf(DIST[id], ui.ds); if (v.pending) pend++; else if (v.winner === "D") dW++; else rW++; }
+  const none = TOTAL - dW - rW;
+  $("d-seats").textContent = dW; $("r-seats").textContent = rW;
+  const unit = D.kind === "pres" ? "districts carried" : "seats won";
+  $("d-sub").textContent = unit; $("r-sub").textContent = unit;
+  const cD = marginColor(-0.3), cR = marginColor(0.2);
+  $("seatbar").innerHTML = `<div style="width:${dW / TOTAL * 100}%;background:${cD}"></div><div style="flex:1;background:var(--line)"></div><div style="width:${rW / TOTAL * 100}%;background:${cR}"></div><span class="mark" style="left:calc(${MAJORITY / TOTAL * 100}% - 1px)"></span>`;
+  $("seatbar-labels").innerHTML = `<span style="left:${MAJORITY / TOTAL * 100}%;transform:translateX(-50%)">218 for a majority</span>${none ? `<span class="nd" style="right:0">${none} ${pend ? "not drawn or pending" : "not drawn yet"}</span>` : ""}`;
+}
+function renderLegend() {
+  const stops = [];
+  for (let i = 0; i <= 20; i++) { const m = -0.3 + i * 0.03; stops.push(`${marginColor(m)} ${i * 5}%`); }
+  const D = DATASETS[ui.ds];
+  $("legend").innerHTML = `<div class="legend-row">
+    <span class="it"><b class="D">D+30</b><span class="gbar" style="background:linear-gradient(90deg,${stops.join(",")})"></span><b class="R">R+30</b></span>
+    ${Object.keys(DIST).length < TOTAL ? `<span class="it"><span class="sw" style="background:var(--blank)"></span>Not drawn yet</span>` : ""}
+    ${D.kind === "house" ? `${ORDER.some(id => valueOf(DIST[id], ui.ds).pending) ? `<span class="it"><span class="sw" style="background:repeating-linear-gradient(45deg,var(--blank) 0 3px,var(--state-line) 3px 4px)"></span>Result pending</span>` : ""}
+    ${ORDER.some(id => valueOf(DIST[id], ui.ds).opp) ? `<span class="it"><span class="sw" style="background:var(--blank);border:2.5px solid var(--ind)"></span>Independent or Libertarian ran instead of a Democrat (counted on the D side)</span>` : ""}
+    ${ORDER.some(id => valueOf(DIST[id], ui.ds).unc) ? `<span class="it"><span class="sw" style="background:${marginColor(-1, true)}"></span><span class="sw" style="background:${marginColor(1, true)}"></span>No opponent</span>` : ""}` : ""}</div>`;
+}
+function renderProgress() {
+  const abs = Object.keys(NAT.states).sort((a, b) => NAT.states[a].name.localeCompare(NAT.states[b].name));
+  $("prog").innerHTML = abs.map(ab => {
+    const s = NAT.states[ab], k = ST[ab] ? ST[ab].kind : "", pend = ST[ab] && ST[ab].pending;
+    return `<button type="button" class="${k}" data-st="${ab}" title="${esc(s.name)}: ${s.seats} seat${s.seats > 1 ? "s" : ""}${k ? (k === "proposed" ? (pend ? ", lines drawn, results pending" : ", proposed map drawn") : ", at-large") : ", not drawn yet"}">${ab}${pend ? "*" : ""}<span>${s.seats}</span></button>`;
+  }).join("");
+  const pendSt = Object.values(ST).filter(s => s.pending).map(s => s.name);
+  const drawn = Object.values(ST).filter(s => s.kind === "proposed"), al = Object.values(ST).filter(s => s.kind === "at-large");
+  const seatsDrawn = drawn.reduce((a, s) => a + s.seats, 0), seatsAL = al.reduce((a, s) => a + s.seats, 0);
+  $("prog-dek").textContent = `${seatsDrawn} seats redrawn in ${drawn.length} state${drawn.length === 1 ? "" : "s"}, plus ${seatsAL} at-large seats. ${TOTAL - seatsDrawn - seatsAL ? `${TOTAL - seatsDrawn - seatsAL} seats to go.` : "Every seat is in."}${pendSt.length ? ` * ${pendSt.join(", ")}: lines drawn, results pending.` : ""} Click a state to zoom to it.`;
+}
+
+// =====================================================================
+// CARD
+// =====================================================================
+function hypoBlock(d) {
+  const H = DATASETS.env, h = d.house[2026], v = valueOf(d, "env");
+  if (v.pending) return `<p class="note">There’s no 2026 result to shift for this district.</p>`;
+  const toward = H.shift > 0 ? "Republicans" : "Democrats";
+  return `<div class="big-m"><span class="t">Hypothetical: ${H.nation}</span><span class="v ${cls(v.m)}">${fmtM(v.m)}</span></div>
+    ${mbar(v.m)}
+    <table class="mini"><tbody>
+      <tr><td>Implied 2026 margin (nation at about ${fmtM(H.base)})</td><td class="rt ${cls(h.m)}">${fmtM(h.m)}</td></tr>
+      <tr><td>Shift to ${H.nation}</td><td class="rt ${cls(H.shift)}">${fmtM(H.shift)}</td></tr>
+      <tr><td><b>Hypothetical margin</b></td><td class="rt ${cls(v.m)}"><b>${fmtM(v.m)}</b></td></tr>
+    </tbody></table>
+    <p class="note">Every district keeps its 2026 pattern and moves ${Math.abs(H.shift * 100).toFixed(1)} points toward ${toward}, so the country sits at ${H.txt === "Even" ? "an even split" : H.txt} instead of the roughly ${fmtM(H.base)} it’s on track for in 2026.</p>`;
+}
+function presBlock(d, y) {
+  const p = d.pres[y];
+  if (!p) return "";
+  const m = (p[1] - p[0]) / p[2], [cd, cr] = PRES_CANDS[y];
+  return `<div class="big-m"><span class="t">${y} President</span><span class="v ${cls(m)}">${fmtM(m)}</span></div>
+    <div class="vbar"><span style="width:${p[0] / p[2] * 100}%;background:${marginColor(-0.3)}"></span><span style="flex:1"></span><span style="width:${p[1] / p[2] * 100}%;background:${marginColor(0.2)}"></span></div>
+    <div class="vrow"><span><b class="D">${cd}</b> ${pct(p[0] / p[2])} <span class="num" style="color:var(--muted);font-size:12.5px">${p[0].toLocaleString()}</span></span><span><span class="num" style="color:var(--muted);font-size:12.5px">${p[1].toLocaleString()}</span> ${pct(p[1] / p[2])} <b class="R">${cr}</b></span></div>`;
+}
+function houseBlock(d, y) {
+  const h = d.house && d.house[y], st = ST[d.st];
+  if (!h) return `<p class="note${st.notes && st.notes[y] ? " warn" : ""}">${st.notes && st.notes[y] ? esc(st.notes[y]) : `No ${y} House result for ${esc(st.name)} yet.`}</p>`;
+  if (h.actual) {
+    const v = valueOf(d, "h" + y);
+    const [dv, rv, tv] = h.h;
+    return `<div class="big-m"><span class="t">${y} House · ${/^placeholder/i.test(h.status || "") ? "projected" : "actual"}</span><span class="v ${v.unc ? "" : cls(h.m)}">${h.m == null ? "Unc." : fmtM(h.m)}</span></div>
+      ${h.m == null ? "" : `<div class="vbar"><span style="width:${dv / tv * 100}%;background:${v.opp ? "var(--ind)" : marginColor(-0.3)}"></span><span style="flex:1"></span><span style="width:${rv / tv * 100}%;background:${marginColor(0.2)}"></span></div>`}
+      <div class="vrow"><span>${h.dc ? `<b class="${v.opp ? "I" : "D"}">${esc(h.dc)}${v.opp ? ` (${v.opp})` : ""}</b> ${pct(dv / tv)}` : `<span class="note">No Democrat</span>`}</span><span>${rv ? `${pct(rv / tv)} <b class="R">${esc(h.rc)}</b>` : `<span class="note">No Republican</span>`}</span></div>
+      <p class="note">${esc(h.status.charAt(0).toUpperCase() + h.status.slice(1))}. ${v.opp ? `With no Democrat in the final matchup, ${esc(h.dc)} is counted on the Democratic side. ` : ""}${esc(st.name)} has one at-large seat, so there is nothing to redraw.</p>`;
+  }
+  const rows = h.parts.filter(pt => pt.w >= 0.005).map(pt => {
+    const c = st.current[pt.o] && st.current[pt.o][y];
+    if (!c) return "";
+    const noDR = c.hm == null || (c.dp && c.dp !== "D");
+    const sw = noDR ? (c.imp != null ? c.imp : null) : c.hm - c.pm;
+    return `<tr class="top"><td><b>${esc(pt.o)}</b></td><td class="rt">${Math.round(pt.w * 100)}%</td><td class="rt ${cls(c.hm)}">${fmtM(c.hm)}</td><td class="rt ${cls(c.pm)}">${fmtM(c.pm)}</td><td class="rt ${cls(sw)}">${fmtM(sw)}${noDR && c.imp != null ? "*" : ""}</td></tr>
+      <tr class="sub"><td colspan="5" class="cand">${c.hm == null ? (c.dc && !c.rc ? `${esc(c.dc)} (D), no Republican` : c.rc && !c.dc ? `${esc(c.rc)} (R), unopposed` : "No D-vs-R race") : `${esc(c.dc)} (${esc(c.dp || "D")}) vs. ${esc(c.rc)} (R)${c.dp && c.dp !== "D" ? " · no Democrat" : ""}`}${noDR && c.imp != null ? ` · *swing set to the ${esc(st.name)} average` : ""}</td></tr>`;
+  }).join("");
+  const v = h.m;
+  if (v == null && h.pending) return `<div class="big-m"><span class="t">${y} House · implied</span><span class="v">Pending</span></div>
+    <p class="note warn">${esc(h.note)}.</p>
+    <div style="overflow-x:auto"><table class="mini"><thead><tr><th>District then</th><th class="rt">Share</th><th class="rt">House</th><th class="rt">Pres ’${String(h.ref).slice(2)}</th><th class="rt">Swing</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  if (v == null && h.unc) return `<div class="big-m"><span class="t">${y} House · implied</span><span class="v">Unc.</span></div>
+    <div class="stack"><div class="ln"><span>${h.ref} presidential margin here</span><span class="${cls(h.base)}">${fmtM(h.base)}</span></div></div>
+    <p class="note warn">${esc(h.note)}. It’s shaded as uncontested, like the race it came from.</p>
+    <div style="overflow-x:auto"><table class="mini"><thead><tr><th>District then</th><th class="rt">Share</th><th class="rt">House</th><th class="rt">Pres ’${String(h.ref).slice(2)}</th><th class="rt">Swing</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="big-m"><span class="t">${y} House · implied</span><span class="v ${cls(v)}">${fmtM(v)}</span></div>
+    <div class="stack">
+      <div class="ln"><span>${h.ref} presidential margin here</span><span class="${cls(h.base)}">${fmtM(h.base)}</span></div>
+      <div class="ln"><span>+ House candidates vs. top of ticket</span><span class="${cls(h.adj)}">${fmtM(h.adj)}</span></div>
+      <div class="ln tot"><span>Implied ${y} House margin</span><span class="${cls(v)}">${fmtM(v)}</span></div>
+    </div>
+    <div style="overflow-x:auto"><table class="mini"><thead><tr><th>District then</th><th class="rt">Share</th><th class="rt">House</th><th class="rt">Pres ’${String(h.ref).slice(2)}</th><th class="rt">Swing</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${h.note ? `<p class="note warn">${esc(h.note)}</p>` : ""}
+    ${st.caveats && st.caveats[y] ? `<p class="note warn">${esc(st.caveats[y])}</p>` : ""}
+    <p class="note">Districts listed are the ones the ${y} race was actually run under. Swing is the House margin minus the presidential margin there. ${(() => { const c = Object.values(st.current).find(c => c[y]); const src = c && c[y].psrc;
+      const txt = { "published": "the published results", "DRA official map": "from your DRA export of the official map", "Daily Kos Elections": "from Daily Kos Elections" }[src] || (src ? src : "");
+      return txt ? `The ${h.ref} presidential margins in those districts are ${esc(txt)}.` : ""; })()}${y === 2026 ? " 2026 returns are unofficial." : ""}</p>`;
+}
+function electionsHTML(d) {
+  const rows = [];
+  for (const y of [2026, 2024, 2022, 2020, 2018, 2016]) {
+    const h = d.house && d.house[y];
+    if (!h) { rows.push(`<tr><td>${y} House</td><td class="rt">—</td><td>Pending</td></tr>`); continue; }
+    const v = valueOf(d, "h" + y);
+    rows.push(`<tr><td>${y} House <span class="cand">${h.actual ? "actual" : "implied"}${v.opp ? `, vs. ${PARTY_NAME[v.opp]}` : ""}</span></td><td class="rt ${v.unc ? "" : cls(h.m)}">${v.unc ? "Unc." : fmtM(h.m)}</td><td>${v.unc ? "" : mbar(h.m)}</td></tr>`);
+  }
+  for (const y of [2024, 2020, 2016]) {
+    const p = d.pres[y]; if (!p) continue;
+    const m = (p[1] - p[0]) / p[2];
+    rows.push(`<tr><td>${y} President <div class="cand">${PRES_CANDS[y][0]} ${pct(p[0] / p[2])} · ${PRES_CANDS[y][1]} ${pct(p[1] / p[2])}</div></td><td class="rt ${cls(m)}">${fmtM(m)}</td><td>${mbar(m)}</td></tr>`);
+  }
+  return `<table class="mini"><thead><tr><th>Race</th><th class="rt">Margin</th><th></th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+}
+function renderCard() {
+  const card = $("card");
+  if (!ui.sel) { renderStateCard(ui.selState); return; }
+  const d = DIST[ui.sel], st = ST[d.st], D = DATASETS[ui.ds], v = valueOf(d, ui.ds);
+  const title = d.path ? `${esc(st.name)} · proposed ${ordinal(d.n)} district` : `${esc(st.name)} · at-large district`;
+  const chip = v.pending ? `<span class="chip">No result yet</span>`
+    : `<span class="chip"><i style="background:${marginColor(v.m, v.unc)}"></i><span class="${v.unc ? "" : cls(v.m)}">${v.unc ? "Uncontested" : fmtM(v.m)}</span></span>`;
+  let body = "";
+  if (st.pending && ui.tab !== "demo") {
+    body = `<p class="note warn">${esc(st.name)}’s proposed lines are drawn, but its DRA district-data export isn’t loaded yet, so there are no results for these districts.</p>`;
+  } else if (ui.tab === "results") {
+    body = D.hypo != null ? hypoBlock(d) : D.kind === "pres" ? presBlock(d, D.year) + `<p class="note">Switch to the House view above to see implied House results built from this ${D.year >= 2024 ? "result" : "baseline"}.</p>` : houseBlock(d, D.year);
+  } else if (ui.tab === "demo") body = demoHTML(d);
+  else body = electionsHTML(d);
+  card.innerHTML = `<div class="hd"><div><div class="did">${esc(d.id)}</div><div class="dsub">${title}</div></div>${chip}</div>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="results" aria-selected="${ui.tab === "results"}">${D.kind === "pres" ? "President" : "House"}</button>
+      <button type="button" role="tab" data-tab="demo" aria-selected="${ui.tab === "demo"}">Demographics</button>
+      <button type="button" role="tab" data-tab="past" aria-selected="${ui.tab === "past"}">Past elections</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px" role="tabpanel">${body}</div>`;
+}
+function renderStateCard(ab) {
+  const card = $("card");
+  if (!ab) {
+    const drawn = Object.values(ST).filter(s => s.kind === "proposed");
+    card.innerHTML = `<div class="overview" style="display:flex;flex-direction:column;gap:10px"><div class="did" style="font-family:var(--f-display);font-weight:800;font-size:30px">Pick a district</div>
+      <p class="note">Click a district on the map, or choose one above. Click empty space, click it again or press Esc to clear.</p>
+      <div class="stats"><div class="stat"><b>${drawn.reduce((a, s) => a + s.seats, 0)}</b><span>seats redrawn</span></div><div class="stat"><b>${Object.values(ST).filter(s => s.kind === "at-large").length}</b><span>at-large seats</span></div><div class="stat"><b>${TOTAL}</b><span>total seats</span></div></div></div>`;
+    return;
+  }
+  const s = NAT.states[ab], loaded = ST[ab];
+  const list = loaded ? loaded.districts.map(d => { const v = valueOf(d, ui.ds); return `<tr><td><a href="#${d.id}" data-pick="${d.id}">${esc(d.id)}</a></td><td class="rt ${v.unc ? "" : cls(v.m)}">${v.pending ? "—" : v.unc ? "Unc." : fmtM(v.m)}</td><td>${v.pending || v.unc ? "" : mbar(v.m)}</td></tr>`; }).join("") : "";
+  card.innerHTML = `<div class="hd"><div><div class="did">${esc(s.name)}</div><div class="dsub">${s.seats} seat${s.seats > 1 ? "s" : ""} · ${loaded ? (loaded.kind === "proposed" ? "proposed map drawn" : "at-large") : "not drawn yet"}</div></div></div>
+    ${loaded ? `<table class="mini"><thead><tr><th>District</th><th class="rt">${esc(DATASETS[ui.ds].label.split(" result")[0])}</th><th></th></tr></thead><tbody>${list}</tbody></table>`
+      : `<p class="note">${esc(s.name)}’s ${s.seats} districts haven’t been drawn yet. They’ll appear here once the state’s DRA export is added.</p>`}`;
+}
+
+// =====================================================================
+// SELECTION + CONTROLS
+// =====================================================================
+function selectDistrict(id, { zoomTo = false, fromHash = false } = {}) {
+  if (!DIST[id]) return;
+  ui.sel = id; ui.selState = DIST[id].st;
+  $("pick").value = id;
+  renderCard(); markSelected();
+  if (zoomTo) zoomToState(DIST[id].st);
+  if (!fromHash) { try { history.replaceState(null, "", "#" + id); } catch (e) { location.hash = id; } }
+}
+function clearSelection() {
+  if (!ui.sel && !ui.selState) return;
+  ui.sel = null; ui.selState = null;
+  $("pick").value = "";
+  renderCard(); markSelected();
+  try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+}
+function selectState(ab, zoomTo) {
+  ui.sel = null; ui.selState = ab;
+  $("pick").value = "";
+  renderCard(); markSelected();
+  if (zoomTo) zoomToState(ab);
+}
+function setView(v) {
+  ui.view = v; curK = 1;
+  $("v-map").setAttribute("aria-pressed", v === "map"); $("v-hex").setAttribute("aria-pressed", v === "hex");
+  $("maphint").textContent = v === "map" ? "Click a state to zoom · scroll or pinch to zoom" : "Each hexagon is one House seat · blank hexes have no result for this view";
+  for (const d of Object.values(DIST)) delete d._bb;
+  v === "map" ? drawGeo() : drawHex();
+}
+function setDS(ds) {
+  ui.ds = ds;
+  document.querySelectorAll("[data-ds]").forEach(b => b.setAttribute("aria-pressed", b.dataset.ds === ds));
+  $("whatif").classList.toggle("on", ds === "env");
+  renderHeader(); renderLegend(); paint(); renderCard();
+}
+function wire() {
+  $("v-map").onclick = () => setView("map");
+  $("v-hex").onclick = () => setView("hex");
+  document.querySelectorAll("[data-ds]").forEach(b => b.onclick = () => setDS(b.dataset.ds));
+  $("z-in").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 1.8);
+  $("z-out").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 1 / 1.8);
+  $("z-us").onclick = () => svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+  $("pick").onchange = e => { e.target.value ? selectDistrict(e.target.value, { zoomTo: true }) : clearSelection(); };
+  addEventListener("keydown", e => { if (e.key === "Escape") clearSelection(); });
+  let envRaf = 0;
+  const envGo = () => {
+    setEnv(+$("env").value);
+    if (ui.ds !== "env") { setDS("env"); return; }
+    cancelAnimationFrame(envRaf);
+    envRaf = requestAnimationFrame(() => { renderHeader(); paint(); renderCard(); });
+  };
+  $("env").addEventListener("input", envGo);
+  $("env").addEventListener("click", () => { if (ui.ds !== "env") envGo(); });
+  $("card").addEventListener("click", e => {
+    const t = e.target.closest("[data-tab]"); if (t) { ui.tab = t.dataset.tab; renderCard(); return; }
+    const p = e.target.closest("[data-pick]"); if (p) { e.preventDefault(); selectDistrict(p.dataset.pick, { zoomTo: false }); }
+  });
+  $("prog").addEventListener("click", e => {
+    const b = e.target.closest("[data-st]"); if (!b) return;
+    const ab = b.dataset.st;
+    if (ST[ab] && ST[ab].districts.length === 1) selectDistrict(ST[ab].districts[0].id, { zoomTo: true });
+    else selectState(ab, true);
+    $("mapcard").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  });
+  addEventListener("hashchange", () => { const id = decodeURIComponent(location.hash.slice(1)); if (DIST[id] && id !== ui.sel) selectDistrict(id, { zoomTo: true, fromHash: true }); });
+  addEventListener("scroll", hideTip, { passive: true });
+}
+
+// =====================================================================
+// FAIRNESS
+// =====================================================================
+// presidential baseline -> the two House years run on lines measured against it
+const FAIR_LINES = { 2016: [2016, 2018], 2020: [2020, 2022], 2024: [2024, 2026] };
+const REF_P = { 2016: 2016, 2018: 2016, 2020: 2020, 2022: 2020, 2024: 2024, 2026: 2024 };
+let fairP = 2024;
+const sR = v => v && v[0] + v[1] > 0 ? v[1] / (v[0] + v[1]) : null;          // Republican two-party share
+const lean = (pts, dg = 1) => Math.abs(pts) < Math.pow(10, -dg) / 2 ? "Even" : (pts > 0 ? "R+" : "D+") + Math.abs(pts).toFixed(dg);
+const leanCls = pts => Math.abs(pts) < 0.05 ? "" : pts > 0 ? "R" : "D";
+function medianOf(a) { const s = [...a].sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; }
+function proposedShares(P) {
+  let D = 0, R = 0; const sh = [];
+  for (const s of Object.values(ST)) for (const d of s.districts) { const v = d.pres[P]; if (!v) continue; D += v[0]; R += v[1]; sh.push(sR(v)); }
+  return { sh, nat: R / (D + R) };
+}
+function entriesFor(s, y) { return Object.values(s.current || {}).map(o => o[y]).filter(Boolean); }
+function linesShares(y, P) {   // the districts actually used in House year y, on the P presidential vote
+  const sh = [];
+  for (const s of Object.values(ST)) {
+    const ent = entriesFor(s, y);
+    if (!ent.length) { s.districts.forEach(d => { const v = sR(d.pres[P]); if (v != null) sh.push(v); }); continue; }
+    ent.forEach(e => { const v = e.p ? sR(e.p) : e.pm != null ? 0.5 + e.pm / 2 : null; if (v != null) sh.push(v); });
+  }
+  return sh;
+}
+function fairMeasures(sh, nat) {
+  const n = sh.length, at = x => sh.filter(v => v - nat + 0.5 + x > 0.5).length;   // R seats with the national R share at 50% + x
+  const med = medianOf(sh), mean = d3.mean(sh);
+  let eg = 0;
+  for (const r of sh) { const d = 1 - r; eg += (d > 0.5 ? d - 0.5 : d) - (r > 0.5 ? r - 0.5 : r); }
+  return { n, rWon: sh.filter(v => v > 0.5).length, medVsNat: (med - nat) * 200, meanMed: (med - mean) * 200, eg: eg / n * 100,
+    tieR: at(0), resp: (at(0.01) - at(-0.01)) / 4,
+    c5: sh.filter(v => Math.abs(v - 0.5) * 200 < 5).length, c10: sh.filter(v => Math.abs(v - 0.5) * 200 < 10).length };
+}
+function houseSeats(Y) {
+  let pD = 0, pR = 0, aD = 0, aR = 0; const sw = [];
+  for (const s of Object.values(ST)) {
+    s.districts.forEach(d => { const h = d.house[Y]; if (h && h.m != null) (h.m < 0 ? pD++ : pR++); });
+    const ent = entriesFor(s, Y);
+    if (!ent.length) { s.districts.forEach(d => { const h = d.house[Y]; if (h && h.m != null) (h.m < 0 ? aD++ : aR++); }); continue; }
+    ent.forEach(e => {
+      if (e.hm != null) { e.hm < 0 ? aD++ : aR++; if (e.pm != null) sw.push(e.hm - e.pm); }
+      else if (e.rc && !e.dc) aR++; else if (e.dc) aD++;
+    });
+  }
+  return { pD, pR, aD, aR, sw: sw.length ? d3.mean(sw) * 100 : null };
+}
+function renderFairness() {
+  const P = fairP, [y1, y2] = FAIR_LINES[P];
+  const { sh, nat } = proposedShares(P);
+  const plans = [
+    { key: "p", label: "Proposed maps", sh, style: "stroke:var(--plum);stroke-width:3" },
+    { key: "a", label: `Lines used in ${y1}`, sh: linesShares(y1, P), style: "stroke:var(--muted);stroke-width:2;stroke-dasharray:6 4" },
+    { key: "b", label: `Lines used in ${y2}`, sh: linesShares(y2, P), style: "stroke:var(--ink);stroke-width:2;stroke-dasharray:2 3" },
+  ];
+  plans.forEach(p => { p.m = fairMeasures(p.sh, nat); });
+  const [a, b, c] = plans.map(p => p.m), natM = (nat - 0.5) * 200, win = nat > 0.5 ? "Republican" : "Democrat";
+  const cand = { 2016: ["Trump", "Clinton"], 2020: ["Trump", "Biden"], 2024: ["Trump", "Harris"] }[P];
+  const winner = nat > 0.5 ? cand[0] : cand[1];
+  $("fair-sum").innerHTML = `${winner} won the ${P} two-party vote by ${Math.abs(natM).toFixed(1)} points. On that vote the proposed maps give Trump <b>${a.rWon}</b> districts; the lines used in ${y1} gave him ${b.rWon} and the lines used in ${y2} ${c.rWon}.
+    With the national vote shifted to a tie, Republicans would carry <b>${a.tieR}</b> proposed districts against ${b.tieR} and ${c.tieR} on the real lines.
+    ${a.tieR < 217.5 ? "Part of the proposed maps’ Democratic edge there is turnout rather than lines: Democratic-leaning districts cast fewer votes, so a tied national vote leaves the middle seat slightly blue on any map." : "Turnout pulls that number toward Democrats on any map, so the proposed maps’ Republican edge on this vote is, if anything, understated."}
+    The measures turnout doesn’t affect tell the story: the mean–median gap is <b>${lean(a.meanMed)}</b> on the proposed maps against ${lean(b.meanMed)} and ${lean(c.meanMed)} on the real lines, and the efficiency gap is <b>${lean(a.eg)}</b> against ${lean(b.eg)} and ${lean(c.eg)}.
+    The proposed maps are also more competitive: <b>${a.c5}</b> districts within 5 points against ${b.c5} and ${c.c5}.`;
+  const rows = [
+    ["Districts Trump carried", m => `${m.rWon} of ${m.n}`, `${winner} won the two-party vote by ${Math.abs(natM).toFixed(1)} points.`],
+    ["Republican seats with a tied national vote", m => `${m.tieR} <span class="${m.tieR > 217.5 ? "R" : "D"}">(${m.tieR > 217.5 ? "R" : "D"} +${Math.abs(m.tieR - 217.5).toFixed(1)})</span>`, "Every district moved by the same amount until the country splits 50–50. Turnout pulls this a few seats toward D on any map, because Democratic-leaning districts cast fewer votes."],
+    ["Median district vs. the nation", m => `<span class="${leanCls(m.medVsNat)}">${lean(m.medVsNat)}</span>`, "How much redder (R) or bluer (D) the middle seat is than the country. Democratic-leaning districts cast fewer votes, which nudges this toward D on any map."],
+    ["Mean–median gap", m => `<span class="${leanCls(m.meanMed)}">${lean(m.meanMed)}</span>`, "Middle district minus the average district. It isn’t thrown off by turnout; near zero means neither side’s voters are packed more than the other’s."],
+    ["Efficiency gap", m => `<span class="${leanCls(m.eg)}">${lean(m.eg)}</span>`, "Difference in wasted votes (every losing vote, plus winning votes past 50%) as a share of all votes, with equal turnout per district. R means more Democratic votes are wasted."],
+    ["Seats within 5 points", m => `${m.c5}`, "Two-party presidential margin under 5 points: seats either party can win in a normal year."],
+    ["Seats within 10 points", m => `${m.c10}`, "Two-party presidential margin under 10 points: seats that move in a wave."],
+    ["Responsiveness", m => `${m.resp.toFixed(1)} seats / pt`, "Seats that change hands for each point the national margin moves, near a tie."],
+  ];
+  $("fair-tab").innerHTML = `<thead><tr><th>Measure</th>${plans.map(p => `<th class="n">${esc(p.label)}</th>`).join("")}<th>What it means</th></tr></thead><tbody>` +
+    rows.map(([lab, f, ex]) => `<tr><td>${lab}</td>${plans.map((p, i) => `<td class="n${i ? "" : " p"}">${f(p.m)}</td>`).join("")}<td class="ex">${ex}</td></tr>`).join("") + "</tbody>";
+
+  // seats-votes curve
+  $("fair-cap").innerHTML = `<b>Seats–votes curve.</b> Republican seats as the national ${P} two-party margin moves, with every district shifting by the same amount. The vertical line is the actual ${P} result; the horizontal line is a 218-seat majority.`;
+  $("fair-keys").innerHTML = plans.map(p => `<span><svg viewBox="0 0 26 10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" style="${p.style}"/></svg>${esc(p.label)}</span>`).join("");
+  drawFairChart(plans, nat, natM, P);
+
+  // House years
+  const yrs = [2016, 2018, 2020, 2022, 2024, 2026], hs = yrs.map(Y => ({ Y, ...houseSeats(Y) }));
+  const h26 = hs[5];
+  $("fair-house-dek").innerHTML = `The maps set the baseline; each year’s environment then moves every seat at once. “House vs. president” is how far House candidates ran ahead (D) or behind (R) the presidential margin in the average contested district on the lines actually used. In 2026 that was <b>${lean(h26.sw)}</b>, which is why both the real lines and these maps come out so blue: the proposed maps add ${h26.pD - h26.aD >= 0 ? h26.pD - h26.aD : 0} Democratic seats on top of what the real lines produced.`;
+  $("fair-house").innerHTML = `<thead><tr><th>House year</th><th>Measured against</th><th class="n">House vs. president</th><th class="n">Proposed maps (D–R)</th><th class="n">Lines used (D–R)</th><th class="n">Difference</th></tr></thead><tbody>` +
+    hs.map(h => `<tr><td>${h.Y}${h.Y === 2026 ? " (unofficial)" : ""}</td><td>${REF_P[h.Y]} president</td><td class="n ${h.sw == null ? "" : leanCls(h.sw)}">${h.sw == null ? "—" : lean(h.sw)}</td>
+      <td class="n p">${h.pD}–${h.pR}</td><td class="n">${h.aD}–${h.aR}</td><td class="n ${h.pD - h.aD > 0 ? "D" : h.pD - h.aD < 0 ? "R" : ""}">${h.pD - h.aD > 0 ? "D +" + (h.pD - h.aD) : h.pD - h.aD < 0 ? "R +" + (h.aD - h.pD) : "—"}</td></tr>`).join("") + "</tbody>";
+
+  // state by state
+  const sr = Object.values(ST).map(s => {
+    let D = 0, R = 0; const pr = [];
+    s.districts.forEach(d => { const v = d.pres[P]; if (v) { D += v[0]; R += v[1]; pr.push(sR(v)); } });
+    const ent = entriesFor(s, y2), real = ent.length ? ent.map(e => e.p ? sR(e.p) : 0.5 + e.pm / 2) : pr;
+    return { name: s.name, seats: s.seats, m: (R - D) / (D + R) * 100, prop: R / (D + R) * s.seats, pR: pr.filter(v => v > 0.5).length, lR: real.filter(v => v > 0.5).length, ln: real.length };
+  }).sort((p, q) => q.seats - p.seats || p.name.localeCompare(q.name));
+  $("fair-states").innerHTML = `<thead><tr><th>State</th><th class="n">Seats</th><th class="n">${P} margin</th><th class="n">R seats if proportional</th><th class="n">Trump-won: proposed</th><th class="n">Trump-won: ${y2} lines</th></tr></thead><tbody>` +
+    sr.map(r => `<tr><td>${esc(r.name)}</td><td class="n">${r.seats}</td><td class="n ${leanCls(r.m)}">${lean(r.m)}</td><td class="n">${r.prop.toFixed(1)}</td><td class="n p">${r.pR}</td><td class="n">${r.lR}${r.ln !== r.seats ? ` of ${r.ln}` : ""}</td></tr>`).join("") + "</tbody>";
+  document.querySelectorAll("#fair-year button").forEach(bt => bt.setAttribute("aria-pressed", String(+bt.dataset.y === P)));
+}
+let fairPlans = null;
+function drawFairChart(plans, nat, natM, P) {
+  fairPlans = [plans, nat, natM, P];
+  const el = $("fair-chart"), W = Math.max(320, el.clientWidth || 640), H = W < 560 ? 240 : 300, mg = { l: 46, r: 14, t: 12, b: 34 };
+  const xs = d3.range(-12, 12.001, 0.25), pts = plans.map(p => xs.map(x => [x, p.sh.filter(v => v - nat + 0.5 + x / 200 > 0.5).length]));
+  const all = pts.flat().map(q => q[1]);
+  const x = d3.scaleLinear([-12, 12], [mg.l, W - mg.r]), y = d3.scaleLinear([Math.min(d3.min(all), 200) - 5, Math.max(d3.max(all), 240) + 5], [H - mg.b, mg.t]).nice();
+  const svg = d3.select(el).html("").append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img")
+    .attr("aria-label", `Seats–votes curve for the ${P} presidential vote`);
+  svg.append("g").attr("transform", `translate(0,${H - mg.b})`).call(d3.axisBottom(x).ticks(W < 560 ? 5 : 9).tickFormat(v => lean(v, 0)));
+  svg.append("g").attr("transform", `translate(${mg.l},0)`).call(d3.axisLeft(y).ticks(6));
+  svg.append("line").attr("x1", mg.l).attr("x2", W - mg.r).attr("y1", y(218)).attr("y2", y(218)).attr("style", "stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3");
+  svg.append("text").attr("x", W - mg.r).attr("y", y(218) - 5).attr("text-anchor", "end").attr("style", "fill:var(--muted);font:12px var(--f-body)").text("218 for a majority");
+  svg.append("line").attr("x1", x(natM)).attr("x2", x(natM)).attr("y1", mg.t).attr("y2", H - mg.b).attr("style", "stroke:var(--muted);stroke-width:1");
+  svg.append("text").attr("x", x(natM) + 5).attr("y", mg.t + 12).attr("style", "fill:var(--muted);font:12px var(--f-body)").text(`Actual ${P}: ${lean(natM)}`);
+  const line = d3.line().x(q => x(q[0])).y(q => y(q[1])).curve(d3.curveStepAfter);
+  plans.slice().reverse().forEach((p, i) => svg.append("path").attr("d", line(pts[plans.length - 1 - i])).attr("style", "fill:none;" + p.style));
+  svg.append("text").attr("x", (mg.l + W - mg.r) / 2).attr("y", H - 2).attr("text-anchor", "middle").attr("style", "fill:var(--muted);font:12px var(--f-body)").text("National two-party margin");
+}
+function wireFairness() {
+  document.querySelectorAll("#fair-year button").forEach(bt => bt.addEventListener("click", () => { fairP = +bt.dataset.y; renderFairness(); }));
+  let t; window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(() => { if (fairPlans) drawFairChart(...fairPlans); }, 150); });
+}
+
+// =====================================================================
+// BOOT
+// =====================================================================
+async function boot() {
+  if (!window.d3) { $("card").innerHTML = '<p class="note">The map library didn’t load. Check your connection and reload the page.</p>'; return; }
+  try {
+    const [nat, man] = await Promise.all([getJSON("data/national.json"), getJSON("data/manifest.json")]);
+    NAT = nat;
+    const files = await Promise.all(Object.values(man.states).map(s => getJSON(s.file).catch(() => null)));
+    for (const f of files) {
+      if (!f) continue;
+      ST[f.state] = f;
+      for (const d of f.districts) { d.st = f.state; DIST[d.id] = d; if (d.hex != null) HEXD[d.hex] = d; }
+    }
+  } catch (e) {
+    $("card").innerHTML = `<p class="note">The map data didn’t load (${esc(e.message)}). If you opened index.html straight from your disk, serve the folder instead: <span class="num">python3 -m http.server</span>.</p>`;
+    return;
+  }
+  ORDER = Object.values(DIST).sort((a, b) => ST[a.st].name.localeCompare(ST[b.st].name) || a.n - b.n).map(d => d.id);
+  buildDemo();
+  const groups = d3.group(ORDER.map(id => DIST[id]), d => d.st);
+  $("pick").innerHTML = `<option value="">Choose a district…</option>` + [...groups].map(([ab, ds]) =>
+    `<optgroup label="${esc(ST[ab].name)}">${ds.map(d => `<option value="${d.id}">${d.id}${d.path ? ` · ${ordinal(d.n)} district` : " · at-large"}</option>`).join("")}</optgroup>`).join("");
+  $("as-of").innerHTML = `<b>Data as of</b> November 9, 2026. 2026 House returns are unofficial and some states are still counting. Louisiana uses party totals from its November 3 jungle primary until the December 12 runoffs, and Alaska is a placeholder R+3 until its ranked-choice count is done.`;
+  wire();
+  setupHypo(); renderHeader(); renderLegend(); renderProgress();
+  wireFairness(); renderFairness();
+  drawGeo();
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (DIST[h]) selectDistrict(h, { zoomTo: false, fromHash: true });
+  else renderCard();
+}
+boot();
+</script>
+
+</html>

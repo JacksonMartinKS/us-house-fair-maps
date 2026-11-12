@@ -1,0 +1,204 @@
+{
+ "states": {
+  "AK": {
+   "kind": "at-large",
+   "file": "data/states/AK.json"
+  },
+  "AL": {
+   "kind": "proposed",
+   "file": "data/states/AL.json"
+  },
+  "AR": {
+   "kind": "proposed",
+   "file": "data/states/AR.json"
+  },
+  "AZ": {
+   "kind": "proposed",
+   "file": "data/states/AZ.json"
+  },
+  "CA": {
+   "kind": "proposed",
+   "file": "data/states/CA.json"
+  },
+  "CO": {
+   "kind": "proposed",
+   "file": "data/states/CO.json"
+  },
+  "CT": {
+   "kind": "proposed",
+   "file": "data/states/CT.json"
+  },
+  "DE": {
+   "kind": "at-large",
+   "file": "data/states/DE.json"
+  },
+  "FL": {
+   "kind": "proposed",
+   "file": "data/states/FL.json"
+  },
+  "GA": {
+   "kind": "proposed",
+   "file": "data/states/GA.json"
+  },
+  "HI": {
+   "kind": "proposed",
+   "file": "data/states/HI.json"
+  },
+  "IA": {
+   "kind": "proposed",
+   "file": "data/states/IA.json"
+  },
+  "ID": {
+   "kind": "proposed",
+   "file": "data/states/ID.json"
+  },
+  "IL": {
+   "kind": "proposed",
+   "file": "data/states/IL.json"
+  },
+  "IN": {
+   "kind": "proposed",
+   "file": "data/states/IN.json"
+  },
+  "KS": {
+   "kind": "proposed",
+   "file": "data/states/KS.json"
+  },
+  "KY": {
+   "kind": "proposed",
+   "file": "data/states/KY.json"
+  },
+  "LA": {
+   "kind": "proposed",
+   "file": "data/states/LA.json"
+  },
+  "MA": {
+   "kind": "proposed",
+   "file": "data/states/MA.json"
+  },
+  "MD": {
+   "kind": "proposed",
+   "file": "data/states/MD.json"
+  },
+  "ME": {
+   "kind": "proposed",
+   "file": "data/states/ME.json"
+  },
+  "MI": {
+   "kind": "proposed",
+   "file": "data/states/MI.json"
+  },
+  "MN": {
+   "kind": "proposed",
+   "file": "data/states/MN.json"
+  },
+  "MO": {
+   "kind": "proposed",
+   "file": "data/states/MO.json"
+  },
+  "MS": {
+   "kind": "proposed",
+   "file": "data/states/MS.json"
+  },
+  "MT": {
+   "kind": "proposed",
+   "file": "data/states/MT.json"
+  },
+  "NC": {
+   "kind": "proposed",
+   "file": "data/states/NC.json"
+  },
+  "ND": {
+   "kind": "at-large",
+   "file": "data/states/ND.json"
+  },
+  "NE": {
+   "kind": "proposed",
+   "file": "data/states/NE.json"
+  },
+  "NH": {
+   "kind": "proposed",
+   "file": "data/states/NH.json"
+  },
+  "NJ": {
+   "kind": "proposed",
+   "file": "data/states/NJ.json"
+  },
+  "NM": {
+   "kind": "proposed",
+   "file": "data/states/NM.json"
+  },
+  "NV": {
+   "kind": "proposed",
+   "file": "data/states/NV.json"
+  },
+  "NY": {
+   "kind": "proposed",
+   "file": "data/states/NY.json"
+  },
+  "OH": {
+   "kind": "proposed",
+   "file": "data/states/OH.json"
+  },
+  "OK": {
+   "kind": "proposed",
+   "file": "data/states/OK.json"
+  },
+  "OR": {
+   "kind": "proposed",
+   "file": "data/states/OR.json"
+  },
+  "PA": {
+   "kind": "proposed",
+   "file": "data/states/PA.json"
+  },
+  "RI": {
+   "kind": "proposed",
+   "file": "data/states/RI.json"
+  },
+  "SC": {
+   "kind": "proposed",
+   "file": "data/states/SC.json"
+  },
+  "SD": {
+   "kind": "at-large",
+   "file": "data/states/SD.json"
+  },
+  "TN": {
+   "kind": "proposed",
+   "file": "data/states/TN.json"
+  },
+  "TX": {
+   "kind": "proposed",
+   "file": "data/states/TX.json"
+  },
+  "UT": {
+   "kind": "proposed",
+   "file": "data/states/UT.json"
+  },
+  "VA": {
+   "kind": "proposed",
+   "file": "data/states/VA.json"
+  },
+  "VT": {
+   "kind": "at-large",
+   "file": "data/states/VT.json"
+  },
+  "WA": {
+   "kind": "proposed",
+   "file": "data/states/WA.json"
+  },
+  "WI": {
+   "kind": "proposed",
+   "file": "data/states/WI.json"
+  },
+  "WV": {
+   "kind": "proposed",
+   "file": "data/states/WV.json"
+  },
+  "WY": {
+   "kind": "at-large",
+   "file": "data/states/WY.json"
+  }
+ }
+}
