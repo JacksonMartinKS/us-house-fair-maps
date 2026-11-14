@@ -276,6 +276,11 @@ footer { font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--lin
         <button type="button" id="v-map" aria-pressed="true">Map</button>
         <button type="button" id="v-hex" aria-pressed="false">Hex grid</button>
       </div></div>
+    <div class="grp"><span class="k">Color by</span>
+      <div class="seg" role="group" aria-label="How districts are colored">
+        <button type="button" id="c-margin" aria-pressed="true">Margin</button>
+        <button type="button" id="c-flip" aria-pressed="false" title="Solid: same party won it last time. Striped: it flipped.">Win / flip</button>
+      </div></div>
     <div class="grp"><span class="k">President</span>
       <div class="seg" role="group" aria-label="Presidential results">
         <button type="button" data-ds="p2016" aria-pressed="false">2016</button>
@@ -389,7 +394,7 @@ const DATASETS = {
 };
 // where the 2026 national House vote is expected to land once counting finishes (R minus D);
 // the what-if slider treats the 2026 map as this environment and shifts every district from there
-const ENV_2026 = -0.135;
+const ENV_2026 = -0.14;
 function setupHypo() {
   DATASETS.env.base = ENV_2026;
   setEnv(+$("env").value);
@@ -459,7 +464,18 @@ const ST = {};                  // state abbr -> state file
 const DIST = {};                // district id -> district (with .st)
 let ORDER = [];                 // district ids in display order
 const HEXD = {};                // hex cell index -> district
-let ui = { view: "map", ds: "p2024", sel: null, selState: null, tab: "results" };
+let ui = { view: "map", ds: "p2024", sel: null, selState: null, tab: "results", shade: "margin" };
+try { if (localStorage.getItem("hfm-shade") === "flip") ui.shade = "flip"; } catch (e) {}
+// win/flip coloring: each result is compared with the election before it on the same proposed lines
+const PREV = { p2020: "p2016", p2024: "p2020", h2018: "h2016", h2020: "h2018", h2022: "h2020", h2024: "h2022", h2026: "h2024", env: "h2024" };
+function flipOf(d, ds) {
+  const v = valueOf(d, ds);
+  if (v.pending) return null;
+  const p = PREV[ds] ? valueOf(d, PREV[ds]) : null;
+  const from = p && !p.pending ? p.winner : null;
+  return { w: v.winner, from, flip: !!from && from !== v.winner };
+}
+const flipColors = () => ({ D: marginColor(-0.2), Dx: marginColor(-1, true), R: marginColor(0.2), Rx: marginColor(1, true) });
 
 // value of a district for a dataset -> { m, unc, pending, winner }
 function valueOf(d, ds) {
@@ -491,7 +507,13 @@ function valueOf(d, ds) {
 function fillFor(d) {
   const v = valueOf(d, ui.ds);
   if (v.pending) return "url(#pend)";
+  if (ui.shade === "flip") { const f = flipOf(d, ui.ds); return f.flip ? `url(#flip${f.w})` : flipColors()[f.w]; }
   return marginColor(v.m, v.unc, v.opp);
+}
+function inkFor(d) {   // label color that reads on top of a district's fill
+  let f = fillFor(d);
+  if (f.startsWith("url(#flip")) f = flipColors()[f[9]];
+  return f.startsWith("#") && lum(f) < 0.22 ? "#fff" : "#1c2230";
 }
 
 // =====================================================================
@@ -602,10 +624,20 @@ function setupSVG(w, h) {
   const pt = defs.append("pattern").attr("id", "pend").attr("patternUnits", "userSpaceOnUse").attr("width", 5).attr("height", 5).attr("patternTransform", "rotate(45)");
   pt.append("rect").attr("width", 5).attr("height", 5).attr("fill", "var(--blank)");
   pt.append("line").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", 5).attr("stroke", "var(--state-line)").attr("stroke-width", 1.2).attr("stroke-opacity", .55);
+  const ps = w / 200;   // stripe spacing for flipped districts
+  for (const p of ["D", "R"]) {
+    const fp = defs.append("pattern").attr("id", "flip" + p).attr("class", "flippat").attr("patternUnits", "userSpaceOnUse")
+      .attr("width", ps).attr("height", ps).attr("patternTransform", "rotate(45)");
+    fp.append("rect").attr("class", "b").attr("width", ps).attr("height", ps);
+    fp.append("rect").attr("class", "s").attr("width", ps * 0.45).attr("height", ps);
+  }
   svg.append("rect").attr("width", w).attr("height", h).attr("fill", "transparent").on("click", () => { hideTip(); clearSelection(); });
   zoomG = svg.append("g").attr("class", "zg");
   zoom = d3.zoom().scaleExtent([1, 30]).translateExtent([[-w * 0.1, -h * 0.1], [w * 1.1, h * 1.1]])
-    .on("zoom", ev => { zoomG.attr("transform", ev.transform); curK = ev.transform.k; onZoomLabels(); });
+    .on("zoom", ev => {
+      zoomG.attr("transform", ev.transform); curK = ev.transform.k; onZoomLabels();
+      svg.selectAll(".flippat").attr("patternTransform", `rotate(45) scale(${1 / curK})`);   // stripes stay the same size on screen
+    });
   svg.call(zoom).on("dblclick.zoom", null);
 }
 function stateClickable(ab) { return !!NAT.states[ab]; }
@@ -736,6 +768,8 @@ function drawHex() {
 
 function paint() {
   if (!zoomG) return;
+  const FC = flipColors();
+  for (const p of ["D", "R"]) { svg.select(`#flip${p} .b`).attr("fill", FC[p]); svg.select(`#flip${p} .s`).attr("fill", FC[p + "x"]); }
   zoomG.selectAll(".dist").attr("fill", function () { return fillFor(DIST[this.getAttribute("data-id")]); })
     .style("stroke", function () { return this.classList.contains("hex") ? this.getAttribute("fill") : null; })
     .attr("data-ind", function () { return valueOf(DIST[this.getAttribute("data-id")], ui.ds).opp ? 1 : null; });
@@ -743,10 +777,9 @@ function paint() {
     const c = this.getAttribute("data-cell");
     const d = c != null && HEXD[c];
     if (!d) return null;
-    const f = fillFor(d);
-    return f.startsWith("#") && lum(f) < 0.22 ? "#fff" : "#1c2230";
+    return inkFor(d);
   });
-  zoomG.selectAll(".dlab").attr("fill", function () { const f = fillFor(DIST[this.getAttribute("data-id")]); return f.startsWith("#") && lum(f) < 0.22 ? "#fff" : "#1c2230"; });
+  zoomG.selectAll(".dlab").attr("fill", function () { return inkFor(DIST[this.getAttribute("data-id")]); });
   onZoomLabels();
   markSelected();
 }
@@ -826,7 +859,10 @@ function renderHeader() {
   const none = TOTAL - dW - rW;
   $("d-seats").textContent = dW; $("r-seats").textContent = rW;
   const unit = D.kind === "pres" ? "districts carried" : "seats won";
-  $("d-sub").textContent = unit; $("r-sub").textContent = unit;
+  let fx = { D: 0, R: 0 };
+  if (ui.shade === "flip") for (const id of ORDER) { const f = flipOf(DIST[id], ui.ds); if (f && f.flip) fx[f.w]++; }
+  const fl = p => ui.shade === "flip" && PREV[ui.ds] ? ` · ${fx[p]} flip${fx[p] === 1 ? "" : "s"}` : "";
+  $("d-sub").textContent = unit + fl("D"); $("r-sub").textContent = unit + fl("R");
   const cD = marginColor(-0.3), cR = marginColor(0.2);
   $("seatbar").innerHTML = `<div style="width:${dW / TOTAL * 100}%;background:${cD}"></div><div style="flex:1;background:var(--line)"></div><div style="width:${rW / TOTAL * 100}%;background:${cR}"></div><span class="mark" style="left:calc(${MAJORITY / TOTAL * 100}% - 1px)"></span>`;
   $("seatbar-labels").innerHTML = `<span style="left:${MAJORITY / TOTAL * 100}%;transform:translateX(-50%)">218 for a majority</span>${none ? `<span class="nd" style="right:0">${none} ${pend ? "not drawn or pending" : "not drawn yet"}</span>` : ""}`;
@@ -835,6 +871,18 @@ function renderLegend() {
   const stops = [];
   for (let i = 0; i <= 20; i++) { const m = -0.3 + i * 0.03; stops.push(`${marginColor(m)} ${i * 5}%`); }
   const D = DATASETS[ui.ds];
+  if (ui.shade === "flip") {
+    const C = flipColors(), prev = PREV[ui.ds], n = { D: 0, Dx: 0, R: 0, Rx: 0 };
+    for (const id of ORDER) { const f = flipOf(DIST[id], ui.ds); if (f) n[f.w + (f.flip ? "x" : "")]++; }
+    const sw = (p, x) => `<span class="sw" style="background:${x ? `repeating-linear-gradient(45deg,${C[p]} 0 3px,${C[p + "x"]} 3px 5.5px)` : C[p]}"></span>`;
+    const vs = prev ? (DATASETS[prev].kind === "pres" ? `the ${DATASETS[prev].year} presidential result` : `the implied ${DATASETS[prev].year} House result`) : "";
+    $("legend").innerHTML = `<div class="legend-row">
+      <span class="it"><b class="D">Dem.</b>${sw("D")}Win ${n.D}${sw("D", 1)}Flip ${n.Dx}</span>
+      <span class="it"><b class="R">Rep.</b>${sw("R")}Win ${n.R}${sw("R", 1)}Flip ${n.Rx}</span>
+      ${Object.keys(DIST).length < TOTAL ? `<span class="it"><span class="sw" style="background:var(--blank)"></span>Not drawn yet</span>` : ""}
+      <span class="it">${prev ? `Flip = a different party than ${vs}, on these same lines` : "No earlier result on these lines to compare with, so nothing shows as a flip"}</span></div>`;
+    return;
+  }
   $("legend").innerHTML = `<div class="legend-row">
     <span class="it"><b class="D">D+30</b><span class="gbar" style="background:linear-gradient(90deg,${stops.join(",")})"></span><b class="R">R+30</b></span>
     ${Object.keys(DIST).length < TOTAL ? `<span class="it"><span class="sw" style="background:var(--blank)"></span>Not drawn yet</span>` : ""}
@@ -941,7 +989,7 @@ function renderCard() {
   const d = DIST[ui.sel], st = ST[d.st], D = DATASETS[ui.ds], v = valueOf(d, ui.ds);
   const title = d.path ? `${esc(st.name)} · proposed ${ordinal(d.n)} district` : `${esc(st.name)} · at-large district`;
   const chip = v.pending ? `<span class="chip">No result yet</span>`
-    : `<span class="chip"><i style="background:${marginColor(v.m, v.unc)}"></i><span class="${v.unc ? "" : cls(v.m)}">${v.unc ? "Uncontested" : fmtM(v.m)}</span></span>`;
+    : `<span class="chip"><i style="background:${marginColor(v.m, v.unc)}"></i><span class="${v.unc ? "" : cls(v.m)}">${v.unc ? "Uncontested" : fmtM(v.m)}</span>${(() => { const f = ui.shade === "flip" && flipOf(d, ui.ds); return f && f.flip ? `<span style="color:var(--muted);font-weight:500">· flip from ${f.from}</span>` : ""; })()}</span>`;
   let body = "";
   if (st.pending && ui.tab !== "demo") {
     body = `<p class="note warn">${esc(st.name)}’s proposed lines are drawn, but its DRA district-data export isn’t loaded yet, so there are no results for these districts.</p>`;
@@ -1004,6 +1052,12 @@ function setView(v) {
   for (const d of Object.values(DIST)) delete d._bb;
   v === "map" ? drawGeo() : drawHex();
 }
+function setShade(s) {
+  ui.shade = s;
+  $("c-margin").setAttribute("aria-pressed", s === "margin"); $("c-flip").setAttribute("aria-pressed", s === "flip");
+  try { localStorage.setItem("hfm-shade", s); } catch (e) {}
+  renderHeader(); renderLegend(); paint(); renderCard();
+}
 function setDS(ds) {
   ui.ds = ds;
   document.querySelectorAll("[data-ds]").forEach(b => b.setAttribute("aria-pressed", b.dataset.ds === ds));
@@ -1028,6 +1082,9 @@ function wire() {
   renderThemeToggle(); $("theme-tog").onclick = toggleTheme;
   $("v-map").onclick = () => setView("map");
   $("v-hex").onclick = () => setView("hex");
+  $("c-margin").onclick = () => setShade("margin");
+  $("c-flip").onclick = () => setShade("flip");
+  $("c-margin").setAttribute("aria-pressed", ui.shade === "margin"); $("c-flip").setAttribute("aria-pressed", ui.shade === "flip");
   document.querySelectorAll("[data-ds]").forEach(b => b.onclick = () => setDS(b.dataset.ds));
   $("z-in").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 1.8);
   $("z-out").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 1 / 1.8);
@@ -1207,7 +1264,7 @@ async function boot() {
   const groups = d3.group(ORDER.map(id => DIST[id]), d => d.st);
   $("pick").innerHTML = `<option value="">Choose a district…</option>` + [...groups].map(([ab, ds]) =>
     `<optgroup label="${esc(ST[ab].name)}">${ds.map(d => `<option value="${d.id}">${d.id}${d.path ? ` · ${ordinal(d.n)} district` : " · at-large"}</option>`).join("")}</optgroup>`).join("");
-  $("as-of").innerHTML = `<b>Data as of</b> November 9, 2026. 2026 House returns are unofficial and some states are still counting. Louisiana uses party totals from its November 3 jungle primary until the December 12 runoffs, and Alaska is a placeholder R+3 until its ranked-choice count is done.`;
+  $("as-of").innerHTML = `<b>Data as of</b> November 14, 2026. 2026 House returns are unofficial and a few states are still counting. Louisiana uses party totals from its November 3 jungle primary until the December 12 runoffs, and Alaska uses the preliminary ranked-choice tally (Begich 53%, Hill 47%) until its count is final.`;
   wire();
   setupHypo(); renderHeader(); renderLegend(); renderProgress();
   wireFairness(); renderFairness();
