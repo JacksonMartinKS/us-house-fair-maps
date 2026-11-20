@@ -1264,7 +1264,7 @@ async function boot() {
   const groups = d3.group(ORDER.map(id => DIST[id]), d => d.st);
   $("pick").innerHTML = `<option value="">Choose a district…</option>` + [...groups].map(([ab, ds]) =>
     `<optgroup label="${esc(ST[ab].name)}">${ds.map(d => `<option value="${d.id}">${d.id}${d.path ? ` · ${ordinal(d.n)} district` : " · at-large"}</option>`).join("")}</optgroup>`).join("");
-  $("as-of").innerHTML = `<b>Data as of</b> November 14, 2026. 2026 House returns are unofficial and a few states are still counting. Louisiana uses party totals from its November 3 jungle primary until the December 12 runoffs, and Alaska uses the preliminary ranked-choice tally (Begich 53%, Hill 47%) until its count is final.`;
+  $("as-of").innerHTML = `<b>Data as of</b> November 19, 2026. 2026 House returns are unofficial and a few states are still counting. Louisiana uses party totals from its November 3 jungle primary until the December 12 runoffs, and Alaska uses its final ranked-choice round (Begich 51.35%, Hill 48.65%).`;
   wire();
   setupHypo(); renderHeader(); renderLegend(); renderProgress();
   wireFairness(); renderFairness();
