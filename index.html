@@ -287,6 +287,12 @@ footer { font-size: 13.5px; color: var(--muted); border-top: 1px solid var(--lin
         <button type="button" data-ds="p2020" aria-pressed="false">2020</button>
         <button type="button" data-ds="p2024" aria-pressed="true">2024</button>
       </div></div>
+    <div class="grp"><span class="k">President, swing</span>
+      <div class="seg" role="group" aria-label="Presidential swing between elections">
+        <button type="button" data-ds="s1620" aria-pressed="false" title="How each district moved from 2016 to 2020">’16→’20</button>
+        <button type="button" data-ds="s2024" aria-pressed="false" title="How each district moved from 2020 to 2024">’20→’24</button>
+        <button type="button" data-ds="s1624" aria-pressed="false" title="How each district moved from 2016 to 2024">’16→’24</button>
+      </div></div>
     <div class="grp"><span class="k">House, implied</span>
       <div class="seg" role="group" aria-label="Implied US House results">
         <button type="button" data-ds="h2016" aria-pressed="false">2016</button>
@@ -383,6 +389,9 @@ const DATASETS = {
   p2016: { kind: "pres", year: 2016, label: "2016 presidential result" },
   p2020: { kind: "pres", year: 2020, label: "2020 presidential result" },
   p2024: { kind: "pres", year: 2024, label: "2024 presidential result" },
+  s1620: { kind: "swing", from: 2016, to: 2020, label: "Presidential swing, 2016 to 2020" },
+  s2024: { kind: "swing", from: 2020, to: 2024, label: "Presidential swing, 2020 to 2024" },
+  s1624: { kind: "swing", from: 2016, to: 2024, label: "Presidential swing, 2016 to 2024" },
   h2016: { kind: "house", year: 2016, label: "Implied 2016 US House result" },
   h2018: { kind: "house", year: 2018, label: "Implied 2018 US House result" },
   h2020: { kind: "house", year: 2020, label: "Implied 2020 US House result" },
@@ -478,8 +487,15 @@ function flipOf(d, ds) {
 const flipColors = () => ({ D: marginColor(-0.2), Dx: marginColor(-1, true), R: marginColor(0.2), Rx: marginColor(1, true) });
 
 // value of a district for a dataset -> { m, unc, pending, winner }
+const SWING_K = 2;   // swing colors run twice as hot as margin colors: a 15-point swing gets the 30-point shade
+const presM = (d, y) => { const p = d.pres && d.pres[y]; return p ? (p[1] - p[0]) / p[2] : null; };
 function valueOf(d, ds) {
   const D = DATASETS[ds];
+  if (D.kind === "swing") {   // change in the presidential margin; negative = moved toward Democrats
+    const a = presM(d, D.from), b = presM(d, D.to);
+    if (a == null || b == null) return { pending: true };
+    return { m: b - a, winner: b - a < 0 ? "D" : "R", swing: true, from: a, to: b };
+  }
   if (D.kind === "pres") {
     const p = d.pres && d.pres[D.year];
     if (!p) return { pending: true };
@@ -507,6 +523,7 @@ function valueOf(d, ds) {
 function fillFor(d) {
   const v = valueOf(d, ui.ds);
   if (v.pending) return "url(#pend)";
+  if (v.swing) return marginColor(v.m * SWING_K);
   if (ui.shade === "flip") { const f = flipOf(d, ui.ds); return f.flip ? `url(#flip${f.w})` : flipColors()[f.w]; }
   return marginColor(v.m, v.unc, v.opp);
 }
@@ -833,6 +850,7 @@ function distTip(ev, d) {
   let sub = "";
   if (v.pending) sub = D.kind === "house" ? "No result yet" : "No data";
   else if (v.unc) sub = "No Democrat-vs-Republican race";
+  else if (v.swing) sub = `${D.from} ${fmtM(v.from)} → ${D.to} ${fmtM(v.to)}`;
   else if (D.kind === "pres") { const p = d.pres[D.year]; sub = `${PRES_CANDS[D.year][0]} ${pct(p[0] / p[2])} · ${PRES_CANDS[D.year][1]} ${pct(p[1] / p[2])}`; }
   else if (v.opp) sub = `Actual result · vs. ${PARTY_NAME[v.opp]} ${esc(v.oppName)}`;
   else if (D.hypo != null) sub = `2026 implied ${fmtM(d.house[2026].m)} · shifted ${fmtM(D.shift)}`;
@@ -858,19 +876,28 @@ function renderHeader() {
   for (const id of ORDER) { const v = valueOf(DIST[id], ui.ds); if (v.pending) pend++; else if (v.winner === "D") dW++; else rW++; }
   const none = TOTAL - dW - rW;
   $("d-seats").textContent = dW; $("r-seats").textContent = rW;
-  const unit = D.kind === "pres" ? "districts carried" : "seats won";
+  const unit = D.kind === "swing" ? "districts swung their way" : D.kind === "pres" ? "districts carried" : "seats won";
   let fx = { D: 0, R: 0 };
   if (ui.shade === "flip") for (const id of ORDER) { const f = flipOf(DIST[id], ui.ds); if (f && f.flip) fx[f.w]++; }
-  const fl = p => ui.shade === "flip" && PREV[ui.ds] ? ` · ${fx[p]} flip${fx[p] === 1 ? "" : "s"}` : "";
+  const fl = p => ui.shade === "flip" && D.kind !== "swing" && PREV[ui.ds] ? ` · ${fx[p]} flip${fx[p] === 1 ? "" : "s"}` : "";
   $("d-sub").textContent = unit + fl("D"); $("r-sub").textContent = unit + fl("R");
   const cD = marginColor(-0.3), cR = marginColor(0.2);
   $("seatbar").innerHTML = `<div style="width:${dW / TOTAL * 100}%;background:${cD}"></div><div style="flex:1;background:var(--line)"></div><div style="width:${rW / TOTAL * 100}%;background:${cR}"></div><span class="mark" style="left:calc(${MAJORITY / TOTAL * 100}% - 1px)"></span>`;
-  $("seatbar-labels").innerHTML = `<span style="left:${MAJORITY / TOTAL * 100}%;transform:translateX(-50%)">218 for a majority</span>${none ? `<span class="nd" style="right:0">${none} ${pend ? "not drawn or pending" : "not drawn yet"}</span>` : ""}`;
+  const sws = D.kind === "swing" ? ORDER.map(id => valueOf(DIST[id], ui.ds)).filter(v => !v.pending).map(v => v.m).sort((a, b) => a - b) : null;
+  $("seatbar-labels").innerHTML = sws ? `<span style="left:50%;transform:translateX(-50%)">Median district swung ${fmtM(sws[Math.floor(sws.length / 2)])}</span>` : `<span style="left:${MAJORITY / TOTAL * 100}%;transform:translateX(-50%)">218 for a majority</span>${none ? `<span class="nd" style="right:0">${none} ${pend ? "not drawn or pending" : "not drawn yet"}</span>` : ""}`;
 }
 function renderLegend() {
   const stops = [];
   for (let i = 0; i <= 20; i++) { const m = -0.3 + i * 0.03; stops.push(`${marginColor(m)} ${i * 5}%`); }
   const D = DATASETS[ui.ds];
+  if (D.kind === "swing") {
+    const ss = [];
+    for (let i = 0; i <= 20; i++) { const m = -0.15 + i * 0.015; ss.push(`${marginColor(m * SWING_K)} ${i * 5}%`); }
+    $("legend").innerHTML = `<div class="legend-row">
+      <span class="it"><b class="D">Swung D 15+</b><span class="gbar" style="background:linear-gradient(90deg,${ss.join(",")})"></span><b class="R">Swung R 15+</b></span>
+      <span class="it">Change in the presidential margin from ${D.from} to ${D.to}, on these same proposed lines</span></div>`;
+    return;
+  }
   if (ui.shade === "flip") {
     const C = flipColors(), prev = PREV[ui.ds], n = { D: 0, Dx: 0, R: 0, Rx: 0 };
     for (const id of ORDER) { const f = flipOf(DIST[id], ui.ds); if (f) n[f.w + (f.flip ? "x" : "")]++; }
@@ -917,6 +944,20 @@ function hypoBlock(d) {
       <tr><td><b>Hypothetical margin</b></td><td class="rt ${cls(v.m)}"><b>${fmtM(v.m)}</b></td></tr>
     </tbody></table>
     <p class="note">Every district keeps its 2026 pattern and moves ${Math.abs(H.shift * 100).toFixed(1)} points toward ${toward}, so the country sits at ${H.txt === "Even" ? "an even split" : H.txt} instead of the roughly ${fmtM(H.base)} it’s on track for in 2026.</p>`;
+}
+function swingBlock(d, D) {
+  const a = presM(d, D.from), b = presM(d, D.to);
+  if (a == null || b == null) return "";
+  const s = b - a, pa = d.pres[D.from], pb = d.pres[D.to];
+  const dsh = pb[0] / pb[2] - pa[0] / pa[2], rsh = pb[1] / pb[2] - pa[1] / pa[2];
+  const pp = x => (x >= 0 ? "+" : "−") + Math.abs(x * 100).toFixed(1);
+  return `<div class="big-m"><span class="t">${D.from}–${D.to} presidential swing</span><span class="v ${cls(s)}">${fmtM(s)}</span></div>
+    <div class="stack">
+      <div class="ln"><span>${D.from}: ${PRES_CANDS[D.from][0]} vs. Trump</span><span class="${cls(a)}">${fmtM(a)}</span></div>
+      <div class="ln"><span>${D.to}: ${PRES_CANDS[D.to][0]} vs. Trump</span><span class="${cls(b)}">${fmtM(b)}</span></div>
+      <div class="ln tot"><span>Swing toward ${s < 0 ? "Democrats" : "Republicans"}</span><span class="${cls(s)}">${fmtM(s)}</span></div>
+    </div>
+    <p class="note">Democratic vote share ${pp(dsh)} points (${pct(pa[0] / pa[2])} → ${pct(pb[0] / pb[2])}), Republican ${pp(rsh)} (${pct(pa[1] / pa[2])} → ${pct(pb[1] / pb[2])}). Same proposed lines in both years.</p>`;
 }
 function presBlock(d, y) {
   const p = d.pres[y];
@@ -989,17 +1030,17 @@ function renderCard() {
   const d = DIST[ui.sel], st = ST[d.st], D = DATASETS[ui.ds], v = valueOf(d, ui.ds);
   const title = d.path ? `${esc(st.name)} · proposed ${ordinal(d.n)} district` : `${esc(st.name)} · at-large district`;
   const chip = v.pending ? `<span class="chip">No result yet</span>`
-    : `<span class="chip"><i style="background:${marginColor(v.m, v.unc)}"></i><span class="${v.unc ? "" : cls(v.m)}">${v.unc ? "Uncontested" : fmtM(v.m)}</span>${(() => { const f = ui.shade === "flip" && flipOf(d, ui.ds); return f && f.flip ? `<span style="color:var(--muted);font-weight:500">· flip from ${f.from}</span>` : ""; })()}</span>`;
+    : `<span class="chip"><i style="background:${v.swing ? marginColor(v.m * SWING_K) : marginColor(v.m, v.unc)}"></i><span class="${v.unc ? "" : cls(v.m)}">${v.unc ? "Uncontested" : fmtM(v.m)}</span>${(() => { const f = ui.shade === "flip" && flipOf(d, ui.ds); return f && f.flip ? `<span style="color:var(--muted);font-weight:500">· flip from ${f.from}</span>` : ""; })()}</span>`;
   let body = "";
   if (st.pending && ui.tab !== "demo") {
     body = `<p class="note warn">${esc(st.name)}’s proposed lines are drawn, but its DRA district-data export isn’t loaded yet, so there are no results for these districts.</p>`;
   } else if (ui.tab === "results") {
-    body = D.hypo != null ? hypoBlock(d) : D.kind === "pres" ? presBlock(d, D.year) + `<p class="note">Switch to the House view above to see implied House results built from this ${D.year >= 2024 ? "result" : "baseline"}.</p>` : houseBlock(d, D.year);
+    body = D.kind === "swing" ? swingBlock(d, D) : D.hypo != null ? hypoBlock(d) : D.kind === "pres" ? presBlock(d, D.year) + `<p class="note">Switch to the House view above to see implied House results built from this ${D.year >= 2024 ? "result" : "baseline"}.</p>` : houseBlock(d, D.year);
   } else if (ui.tab === "demo") body = demoHTML(d);
   else body = electionsHTML(d);
   card.innerHTML = `<div class="hd"><div><div class="did">${esc(d.id)}</div><div class="dsub">${title}</div></div>${chip}</div>
     <div class="tabs" role="tablist">
-      <button type="button" role="tab" data-tab="results" aria-selected="${ui.tab === "results"}">${D.kind === "pres" ? "President" : "House"}</button>
+      <button type="button" role="tab" data-tab="results" aria-selected="${ui.tab === "results"}">${D.kind === "house" ? "House" : "President"}</button>
       <button type="button" role="tab" data-tab="demo" aria-selected="${ui.tab === "demo"}">Demographics</button>
       <button type="button" role="tab" data-tab="past" aria-selected="${ui.tab === "past"}">Past elections</button>
     </div>
